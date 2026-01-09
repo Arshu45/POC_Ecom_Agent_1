@@ -1,61 +1,103 @@
-from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
-from langchain_community.tools import DuckDuckGoSearchRun
-from langchain_classic.agents import create_react_agent, AgentExecutor
-from langsmith import Client
+"""POC Agent: ReAct-style agent with a search and weather tool.
+
+This script sets up:
+- a DuckDuckGo search tool
+- a small weather lookup tool (Weatherstack)
+- a Groq-backed LLM (`ChatGroq`)
+- a ReAct agent assembled and run via `AgentExecutor`
+
+Before running, set environment variables (recommended):
+- `GROQ_API_KEY` for the Groq model
+- `WEATHERSTACK_KEY` for the weather API (optional; a default is used)
+"""
+
 from dotenv import load_dotenv
 import os
-from langchain_core.prompts import PromptTemplate
-
-# from langchain_openai import ChatOpenAI
-from langchain_core.tools import tool
 import requests
 
+from langchain_groq import ChatGroq
+from langchain_community.tools import DuckDuckGoSearchRun
+from langchain_core.tools import tool
+from langchain_classic.agents import create_react_agent, AgentExecutor
+from langsmith import Client
+
+
+# Load environment variables from .env if present
 load_dotenv()
 
 
+# ------------------
+# Tools
+# ------------------
 
+# DuckDuckGo search tool provided by langchain_community
 search_tool = DuckDuckGoSearchRun()
 
 
-
 @tool
-def get_weather_data(city):
+def get_weather_data(city: str) -> dict:
+    """Fetch current weather for `city` using Weatherstack API.
+
+    The API key can be provided via the `WEATHERSTACK_KEY` environment
+    variable. The function returns the parsed JSON response.
     """
-    This function fetches the current weather data for a given city
-    """
-    url = f'https://api.weatherstack.com/current?access_key=4d1d8ae207a8c845a52df8a67bf3623e&query={city}'
+    access_key = os.getenv("WEATHERSTACK_KEY")
+    url = f"https://api.weatherstack.com/current?access_key={access_key}&query={city}"
 
-    response = requests.get(url)
+    resp = requests.get(url)
+    resp.raise_for_status()
+    return resp.json()
 
-    return response.json()
 
+# ------------------
+# LLM Configuration
+# ------------------
 
-llm = HuggingFaceEndpoint(
-    model="meta-llama/Llama-3.1-70B-Instruct",
-    task="text-generation",
-    huggingfacehub_api_token=os.getenv("HUGGING_FACE_ACCESS_TOKEN"),
+# Configure a Groq-hosted chat model. Ensure `GROQ_API_KEY` is set in env.
+llm = ChatGroq(
+    model="llama-3.3-70b-versatile",
+    groq_api_key=os.getenv("GROQ_API_KEY"),
+    temperature=0,
 )
 
-# Step 2: Pull the ReAct prompt from LangChain Hub
+
+# ------------------
+# Agent assembly
+# ------------------
+
+# Pull a ReAct-style prompt template from LangSmith's prompt hub
 client = Client()
 prompt = client.pull_prompt("hwchase17/react")
 
-# Step 3: Create the ReAct agent manually with the pulled prompt
+# Create the ReAct agent with the LLM and tools
 agent = create_react_agent(
     llm=llm,
     tools=[search_tool, get_weather_data],
-    prompt=prompt
+    prompt=prompt,
 )
 
-# Step 4: Wrap it with AgentExecutor
+# Wrap the agent with an executor to handle tool orchestration
 agent_executor = AgentExecutor(
     agent=agent,
     tools=[search_tool, get_weather_data],
-    verbose=True
+    # set verbose=True to see detailed agent step logs
 )
 
-# Step 5: Invoke
-response = agent_executor.invoke({"input": "Find the capital of Madhya Pradesh, then find it's current weather condition"})
-print(response)
+
+def main() -> None:
+    """Run the agent with user-provided input and print the result."""
+    try:
+        user_input = input("Enter your question: ")
+        print("> Entering new AgentExecutor chain...")
+        response = agent_executor.invoke({"input": user_input})
+        print(response)
+    except KeyboardInterrupt:
+        print("Interrupted by user.")
+    except Exception as exc:
+        print("Agent run failed:", exc)
+
+
+if __name__ == "__main__":
+    main()
 
 
