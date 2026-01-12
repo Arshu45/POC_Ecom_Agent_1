@@ -11,49 +11,61 @@ from app.services.agent_service import AgentService
 from app.services.product_retrieval_service import ProductRetrievalService
 
 
+def format_price(metadata: dict) -> str:
+    """
+    Format price string with discount information.
+    
+    Args:
+        metadata: Product metadata dictionary
+        
+    Returns:
+        Formatted price string (e.g., "₹1,632 (2% off)")
+    """
+    price = metadata.get("price")
+    mrp = metadata.get("mrp")
+    
+    if not price:
+        return "Price not available"
+    
+    # Format price with commas
+    price_str = f"₹{int(price):,}"
+    
+    # Add discount if available
+    if mrp and mrp > price:
+        discount = int(((mrp - price) / mrp) * 100)
+        return f"{price_str} ({discount}% off)"
+    
+    return price_str
+
+
 def extract_key_features(metadata: dict, document: str) -> list:
     """
-    Extract key features from product metadata and document.
+    Extract key features from product metadata (Brand, Size, Stock, Occasion).
     
     Args:
         metadata: Product metadata dictionary
         document: Product document JSON string
         
     Returns:
-        List of key feature strings (concise and user-friendly)
+        List of key feature strings
     """
     features = []
-    
-    # Extract key metadata fields in priority order
-    # Price
-    price = metadata.get("price")
-    mrp = metadata.get("mrp")
-    if price:
-        if mrp and mrp > price:
-            discount = int(((mrp - price) / mrp) * 100)
-            features.append(f"₹{int(price)} (MRP: ₹{int(mrp)}, {discount}% off)")
-        else:
-            features.append(f"₹{int(price)}")
-    
-    # Color
-    color = metadata.get("color")
-    if color:
-        features.append(f"Color: {str(color).title()}")
-    
-    # Size
-    size = metadata.get("size")
-    if size:
-        features.append(f"Size: {str(size).upper()}")
     
     # Brand
     brand = metadata.get("brand")
     if brand:
         features.append(f"Brand: {str(brand).title()}")
     
-    # Occasion
-    occasion = metadata.get("occasion")
-    if occasion:
-        features.append(f"Occasion: {str(occasion).title()}")
+    # Size with age group
+    size = metadata.get("size")
+    age_group = metadata.get("age_group")
+    if size:
+        size_str = f"Size: {str(size).upper()}"
+        if age_group:
+            size_str += f" ({str(age_group).upper()})"
+        features.append(size_str)
+    elif age_group:
+        features.append(f"Age: {str(age_group).upper()}")
     
     # Stock status
     stock_status = metadata.get("stock_status")
@@ -61,18 +73,146 @@ def extract_key_features(metadata: dict, document: str) -> list:
         stock_display = str(stock_status).replace("_", " ").title()
         features.append(f"Stock: {stock_display}")
     
-    # Gender/Age group
-    gender = metadata.get("gender")
-    age_group = metadata.get("age_group")
-    if gender or age_group:
-        if gender and age_group:
-            features.append(f"For: {str(gender).title()} ({str(age_group).upper()})")
-        elif gender:
-            features.append(f"For: {str(gender).title()}")
-        elif age_group:
-            features.append(f"Age: {str(age_group).upper()}")
+    # Occasion
+    occasion = metadata.get("occasion")
+    if occasion:
+        features.append(f"Occasion: {str(occasion).title()}")
     
-    return features[:7]  # Limit to 7 key features
+    return features
+
+
+def generate_response_text(products: list, query: str) -> str:
+    """
+    Generate structured response text with recommendations.
+    
+    Args:
+        products: List of product dictionaries
+        query: Original user query
+        
+    Returns:
+        Structured response text highlighting best option
+    """
+    if not products:
+        return f"I couldn't find any products matching '{query}'. Please try different keywords."
+    
+    total = len(products)
+    
+    # Find best product (prioritize in stock, then by price/value)
+    best_product = None
+    for product in products:
+        metadata = product.get("metadata", {})
+        stock_status = str(metadata.get("stock_status", "")).lower()
+        
+        if stock_status == "in stock":
+            best_product = product
+            break
+    
+    # If no in-stock product, use first one
+    if not best_product:
+        best_product = products[0]
+    
+    # Extract best product details
+    try:
+        doc = json.loads(best_product.get("document", "{}"))
+        best_title = doc.get("title", "product")
+    except:
+        best_title = "product"
+    
+    best_metadata = best_product.get("metadata", {})
+    best_price = format_price(best_metadata)
+    best_age = best_metadata.get("age_group", "")
+    
+    # Determine product type and extract color/occasion from products
+    product_type = "product"
+    color = None
+    occasion = None
+    
+    if products:
+        try:
+            first_doc = json.loads(products[0].get("document", "{}"))
+            title = first_doc.get("title", "").lower()
+            if "dress" in title:
+                product_type = "dress" if total == 1 else "dresses"
+            
+            # Extract color and occasion from metadata
+            first_metadata = products[0].get("metadata", {})
+            color = first_metadata.get("color")
+            occasion = first_metadata.get("occasion")
+        except:
+            pass
+    
+    # Build response with color and occasion if available
+    parts = []
+    if color:
+        parts.append(str(color).lower())
+    if product_type != "product":
+        parts.append(product_type)
+    elif total == 1:
+        parts.append("matching product")
+    else:
+        parts.append("matching products")
+    
+    if occasion:
+        parts.append(f"for {str(occasion).lower()}")
+    
+    product_desc = " ".join(parts) if parts else f"{product_type}{'s' if total > 1 else ''}"
+    response = f"I found {total} {product_desc}!"
+    
+    if best_product:
+        response += f" The **{best_title}** ({best_price})"
+        if best_metadata.get("stock_status", "").lower() == "in stock":
+            response += " is your best option - it's in stock"
+        if best_age:
+            response += f" and perfect for {best_age.upper()}"
+        response += "."
+    
+    return response
+
+
+def generate_follow_up_questions(products: list, query: str) -> list:
+    """
+    Generate relevant follow-up questions based on products.
+    
+    Args:
+        products: List of product dictionaries
+        query: Original user query
+        
+    Returns:
+        List of follow-up question strings
+    """
+    questions = []
+    
+    if not products:
+        return questions
+    
+    # Extract unique brands
+    brands = set()
+    fit_types = set()
+    for product in products:
+        metadata = product.get("metadata", {})
+        brand = metadata.get("brand")
+        fit_type = metadata.get("fit_type")
+        if brand:
+            brands.add(brand)
+        if fit_type:
+            fit_types.add(fit_type)
+    
+    # Generate questions based on diversity
+    if len(brands) > 1:
+        questions.append("Would you like to see dresses from other brands?")
+    
+    if len(fit_types) > 1:
+        fit_str = " or ".join([str(f).title() for f in list(fit_types)[:2]])
+        questions.append(f"Do you prefer {fit_str} fit?")
+    
+    # Default questions if not enough diversity
+    if len(questions) < 2:
+        questions.append("Would you like to filter by size or price range?")
+    
+    if len(questions) < 2:
+        questions.append("Do you need help with anything else?")
+    
+    return questions[:2]  # Limit to 2 questions
 
 # Configure logging
 logging.basicConfig(
@@ -181,34 +321,49 @@ async def search(request: SearchRequest) -> SearchResponse:
             logger.error(f"Product search failed: {str(e)}")
             # Continue without products - agent may still find them via tool
         
-        # Step 2: Generate chatbot response using agent
-        response_text = ""
+        # Step 2: Generate recommendations using LLM
+        recommendations = {}
         try:
             if agent_service:
-                response_text = agent_service.generate_response(query=request.query)
-            else:
-                logger.warning("Agent service not available, using fallback response")
-                response_text = "I'm having trouble processing your request. Please try again."
-        except Exception as e:
-            logger.error(f"Agent response generation failed: {str(e)}")
-            # Use fallback response
-            if agent_service:
-                try:
-                    response_text = agent_service._get_fallback_response(request.query)
-                except Exception:
-                    response_text = (
-                        f"I apologize, but I encountered an error processing your query: '{request.query}'. "
-                        "Please try again."
-                    )
-            else:
-                response_text = (
-                    f"I apologize, but I encountered an error processing your query: '{request.query}'. "
-                    "Please try again."
+                recommendations = agent_service.generate_recommendations(
+                    query=request.query,
+                    products=products
                 )
+            else:
+                logger.warning("Agent service not available, using fallback")
+                recommendations = {
+                    "response_text": f"I found {len(products)} product(s) matching '{request.query}'.",
+                    "recommended_product_ids": [],
+                    "reasoning": "",
+                    "follow_up_questions": []
+                }
+        except Exception as e:
+            logger.error(f"Recommendation generation failed: {str(e)}")
+            recommendations = {
+                "response_text": f"I found {len(products)} product(s) matching '{request.query}'.",
+                "recommended_product_ids": [],
+                "reasoning": "",
+                "follow_up_questions": []
+            }
+        
+        response_text = recommendations.get("response_text", "")
+        recommended_ids = recommendations.get("recommended_product_ids", [])
+        follow_up_questions = recommendations.get("follow_up_questions", [])
         
         # Step 3: Format products for response (only essential info)
         formatted_products = []
-        for product in products:
+        # Create a map of product IDs for quick lookup
+        product_map = {p.get("id", ""): p for p in products}
+        
+        # Sort products: recommended first (in order), then others
+        all_product_ids = [p.get("id", "") for p in products]
+        sorted_ids = recommended_ids + [pid for pid in all_product_ids if pid not in recommended_ids]
+        
+        for product_id in sorted_ids:
+            if product_id not in product_map:
+                continue
+                
+            product = product_map[product_id]
             try:
                 # Parse document to get title
                 document = product.get("document", "{}")
@@ -220,22 +375,38 @@ async def search(request: SearchRequest) -> SearchResponse:
                 except:
                     title = "Unknown Product"
                 
-                # Extract key features
+                # Format price
+                price_str = format_price(metadata)
+                
+                # Extract key features (Brand, Size, Stock, Occasion)
                 key_features = extract_key_features(metadata, document)
                 
                 formatted_products.append(ProductResult(
-                    id=product.get("id", ""),
+                    id=product_id,
                     title=title,
+                    price=price_str,
                     key_features=key_features
                 ))
             except Exception as e:
                 logger.warning(f"Error formatting product: {e}")
                 continue
         
-        # Step 4: Return successful response
+        # Step 4: Calculate metadata
+        in_stock_count = sum(
+            1 for p in products 
+            if str(p.get("metadata", {}).get("stock_status", "")).lower() == "in stock"
+        )
+        metadata = {
+            "total_results": len(formatted_products),
+            "in_stock_count": in_stock_count
+        }
+        
+        # Step 7: Return successful response
         return SearchResponse(
             response_text=response_text,
             products=formatted_products,
+            follow_up_questions=follow_up_questions,
+            metadata=metadata,
             success=True,
             error_message=None
         )
@@ -249,6 +420,8 @@ async def search(request: SearchRequest) -> SearchResponse:
                 "Please try again in a moment."
             ),
             products=[],
+            follow_up_questions=[],
+            metadata={"total_results": 0, "in_stock_count": 0},
             success=False,
             error_message=str(e)
         )
