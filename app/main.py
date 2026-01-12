@@ -1,12 +1,78 @@
 """FastAPI application main file."""
 
 import logging
+import json
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.schemas import SearchRequest, SearchResponse
+from app.schemas import SearchRequest, SearchResponse, ProductResult
 from app.services.agent_service import AgentService
+from app.services.product_retrieval_service import ProductRetrievalService
+
+
+def extract_key_features(metadata: dict, document: str) -> list:
+    """
+    Extract key features from product metadata and document.
+    
+    Args:
+        metadata: Product metadata dictionary
+        document: Product document JSON string
+        
+    Returns:
+        List of key feature strings (concise and user-friendly)
+    """
+    features = []
+    
+    # Extract key metadata fields in priority order
+    # Price
+    price = metadata.get("price")
+    mrp = metadata.get("mrp")
+    if price:
+        if mrp and mrp > price:
+            discount = int(((mrp - price) / mrp) * 100)
+            features.append(f"₹{int(price)} (MRP: ₹{int(mrp)}, {discount}% off)")
+        else:
+            features.append(f"₹{int(price)}")
+    
+    # Color
+    color = metadata.get("color")
+    if color:
+        features.append(f"Color: {str(color).title()}")
+    
+    # Size
+    size = metadata.get("size")
+    if size:
+        features.append(f"Size: {str(size).upper()}")
+    
+    # Brand
+    brand = metadata.get("brand")
+    if brand:
+        features.append(f"Brand: {str(brand).title()}")
+    
+    # Occasion
+    occasion = metadata.get("occasion")
+    if occasion:
+        features.append(f"Occasion: {str(occasion).title()}")
+    
+    # Stock status
+    stock_status = metadata.get("stock_status")
+    if stock_status:
+        stock_display = str(stock_status).replace("_", " ").title()
+        features.append(f"Stock: {stock_display}")
+    
+    # Gender/Age group
+    gender = metadata.get("gender")
+    age_group = metadata.get("age_group")
+    if gender or age_group:
+        if gender and age_group:
+            features.append(f"For: {str(gender).title()} ({str(age_group).upper()})")
+        elif gender:
+            features.append(f"For: {str(gender).title()}")
+        elif age_group:
+            features.append(f"Age: {str(age_group).upper()}")
+    
+    return features[:7]  # Limit to 7 key features
 
 # Configure logging
 logging.basicConfig(
@@ -15,34 +81,42 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global service
+# Global services
 agent_service: AgentService = None
+product_service: ProductRetrievalService = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown events."""
-    global agent_service
+    global agent_service, product_service
     
     # Startup
-    logger.info("Initializing agent service...")
+    logger.info("Initializing services...")
     try:
-        agent_service = AgentService()
+        # Initialize product retrieval service (required)
+        product_service = ProductRetrievalService()
+        logger.info("Product retrieval service initialized successfully")
+        
+        # Initialize agent service with product service (required)
+        agent_service = AgentService(product_service=product_service)
         logger.info("Agent service initialized successfully")
     except Exception as e:
-        logger.error(f"Failed to initialize agent service: {str(e)}")
+        logger.error(f"Failed to initialize services: {str(e)}")
+        product_service = None
+        agent_service = None
         # Continue anyway - will use fallback responses
     
     yield
     
     # Shutdown
-    logger.info("Shutting down agent service...")
+    logger.info("Shutting down services...")
 
 
 # Create FastAPI app
 app = FastAPI(
-    title="Agent API",
-    description="FastAPI backend for ReAct agent with search and weather tools",
+    title="E-commerce Product Search Agent API",
+    description="FastAPI backend for product search POC using ReAct agent with semantic search",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -61,7 +135,7 @@ app.add_middleware(
 async def root():
     """Root endpoint."""
     return {
-        "message": "Agent API",
+        "message": "E-commerce Product Search Agent API",
         "version": "1.0.0",
         "endpoints": {
             "search": "/search",
@@ -75,28 +149,39 @@ async def health_check():
     """Health check endpoint."""
     return {
         "status": "healthy",
-        "agent_service": agent_service is not None
+        "agent_service": agent_service is not None,
+        "product_service": product_service is not None
     }
 
 
 @app.post("/search", response_model=SearchResponse)
 async def search(request: SearchRequest) -> SearchResponse:
     """
-    Process user query using LLM agent with search and weather tools.
+    Process user query using LLM agent with product search tool.
     
     This endpoint:
-    1. Processes the query using the ReAct agent
-    2. Agent can use DuckDuckGo search and weather API tools
-    3. Returns chatbot response text
+    1. Searches products using semantic search
+    2. Processes the query using the ReAct agent (agent uses product search tool)
+    3. Returns chatbot response text with product results
     
     Args:
         request: Search request with query
         
     Returns:
-        SearchResponse with chatbot text
+        SearchResponse with chatbot text and product results
     """
     try:
-        # Generate chatbot response using agent
+        # Step 1: Search products directly (for response formatting)
+        products = []
+        try:
+            if product_service:
+                products = product_service.search_products(request.query, n_results=5)
+                logger.info(f"Found {len(products)} products for query: {request.query}")
+        except Exception as e:
+            logger.error(f"Product search failed: {str(e)}")
+            # Continue without products - agent may still find them via tool
+        
+        # Step 2: Generate chatbot response using agent
         response_text = ""
         try:
             if agent_service:
@@ -121,9 +206,36 @@ async def search(request: SearchRequest) -> SearchResponse:
                     "Please try again."
                 )
         
-        # Return successful response
+        # Step 3: Format products for response (only essential info)
+        formatted_products = []
+        for product in products:
+            try:
+                # Parse document to get title
+                document = product.get("document", "{}")
+                metadata = product.get("metadata", {})
+                
+                try:
+                    doc = json.loads(document)
+                    title = doc.get("title", "Unknown Product")
+                except:
+                    title = "Unknown Product"
+                
+                # Extract key features
+                key_features = extract_key_features(metadata, document)
+                
+                formatted_products.append(ProductResult(
+                    id=product.get("id", ""),
+                    title=title,
+                    key_features=key_features
+                ))
+            except Exception as e:
+                logger.warning(f"Error formatting product: {e}")
+                continue
+        
+        # Step 4: Return successful response
         return SearchResponse(
             response_text=response_text,
+            products=formatted_products,
             success=True,
             error_message=None
         )
@@ -136,6 +248,7 @@ async def search(request: SearchRequest) -> SearchResponse:
                 "I apologize, but I'm experiencing technical difficulties. "
                 "Please try again in a moment."
             ),
+            products=[],
             success=False,
             error_message=str(e)
         )

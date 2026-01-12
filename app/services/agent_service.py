@@ -1,13 +1,12 @@
-"""Agent service for LLM-powered responses with search and weather tools."""
+"""Agent service for LLM-powered product search responses."""
 
 import os
 import logging
-import requests
+import json
 from typing import Optional
 from dotenv import load_dotenv
 
 from langchain_groq import ChatGroq
-from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_core.tools import tool
 from langchain_classic.agents import create_react_agent, AgentExecutor
 from langsmith import Client
@@ -18,26 +17,85 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
-@tool
-def get_weather_data(city: str) -> dict:
-    """Fetch current weather for `city` using Weatherstack API.
-
-    The API key can be provided via the `WEATHERSTACK_KEY` environment
-    variable. The function returns the parsed JSON response.
-    """
-    access_key = os.getenv("WEATHERSTACK_KEY")
-    url = f"https://api.weatherstack.com/current?access_key={access_key}&query={city}"
-
-    resp = requests.get(url)
-    resp.raise_for_status()
-    return resp.json()
+def create_product_search_tool(product_service):
+    """Create product search tool for the agent."""
+    
+    @tool
+    def search_products(query: str) -> str:
+        """
+        Search for products in the e-commerce catalog using semantic search.
+        Use this tool when the user is asking about products, items, clothing, dresses, or wants to buy something.
+        
+        Args:
+            query: Product search query (e.g., "maroon dress for birthday", "dresses under 5000")
+            
+        Returns:
+            JSON string with product search results including titles, prices, and metadata
+        """
+        try:
+            products = product_service.search_products(query, n_results=5)
+            
+            if not products:
+                return json.dumps({
+                    "found": False,
+                    "message": f"No products found matching '{query}'",
+                    "products": []
+                })
+            
+            # Format products for agent
+            formatted_products = []
+            for product in products:
+                try:
+                    doc = json.loads(product["document"])
+                    metadata = product["metadata"]
+                    
+                    formatted_product = {
+                        "title": doc.get("title", "Unknown Product"),
+                        "product_id": product.get("id", ""),
+                        "price": metadata.get("price", 0),
+                        "mrp": metadata.get("mrp", 0),
+                        "color": metadata.get("color", ""),
+                        "size": metadata.get("size", ""),
+                        "gender": metadata.get("gender", ""),
+                        "occasion": metadata.get("occasion", ""),
+                        "brand": metadata.get("brand", ""),
+                        "stock_status": metadata.get("stock_status", ""),
+                        "description": doc.get("embedding_text", "")
+                    }
+                    formatted_products.append(formatted_product)
+                except Exception as e:
+                    logger.warning(f"Error formatting product: {e}")
+                    continue
+            
+            return json.dumps({
+                "found": True,
+                "count": len(formatted_products),
+                "products": formatted_products
+            }, indent=2)
+            
+        except Exception as e:
+            logger.error(f"Error in search_products tool: {str(e)}")
+            return json.dumps({
+                "found": False,
+                "error": str(e),
+                "products": []
+            })
+    
+    return search_products
 
 
 class AgentService:
-    """Service for LLM agent orchestration with search and weather tools."""
+    """Service for LLM agent orchestration with product search tool."""
     
-    def __init__(self):
-        """Initialize agent service with LLM and tools."""
+    def __init__(self, product_service):
+        """Initialize agent service with LLM and product search tool.
+        
+        Args:
+            product_service: ProductRetrievalService instance (required)
+        """
+        if not product_service:
+            raise ValueError("ProductRetrievalService is required for AgentService")
+        
         try:
             # Configure Groq LLM
             self.llm = ChatGroq(
@@ -46,9 +104,11 @@ class AgentService:
                 temperature=0,
             )
             
-            # Initialize tools - DuckDuckGo search and weather
-            self.search_tool = DuckDuckGoSearchRun()
-            self.weather_tool = get_weather_data
+            # Create product search tool
+            self.product_search_tool = create_product_search_tool(product_service)
+            tools = [self.product_search_tool]
+            
+            logger.info("Product search tool added to agent")
             
             # Pull ReAct prompt template
             try:
@@ -61,14 +121,14 @@ class AgentService:
             # Create ReAct agent
             self.agent = create_react_agent(
                 llm=self.llm,
-                tools=[self.search_tool, self.weather_tool],
+                tools=tools,
                 prompt=self.prompt,
             )
             
             # Create agent executor
             self.agent_executor = AgentExecutor(
                 agent=self.agent,
-                tools=[self.search_tool, self.weather_tool],
+                tools=tools,
                 verbose=False,
             )
             
