@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Product Details{% endblock %}
+
+{% block content %}
+<div class="container mt-4" id="productContainer">
+    <!-- Loading Spinner -->
+    <div class="text-center" id="loadingSpinner">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <!-- Product Details (will be populated) -->
+    <div id="productDetails" style="display: none;">
+        <!-- Back Button -->
+        <a href="{{ url_for('read_root') }}" class="btn btn-outline-secondary mb-3">
+            <i class="bi bi-arrow-left"></i> Back to Products
+        </a>
+
+        <div class="row">
+            <!-- Product Images -->
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <img id="mainImage" src="" alt="Product Image" class="product-image-main">
+                </div>
+                <div class="d-flex gap-2" id="thumbnailContainer">
+                    <!-- Thumbnails will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Product Info -->
+            <div class="col-md-6">
+                <h1 id="productTitle"></h1>
+                <p class="text-muted">
+                    <i class="bi bi-tag"></i> <span id="productBrand"></span>
+                    <span class="ms-3"><i class="bi bi-grid"></i> <span id="productType"></span></span>
+                </p>
+
+                <div class="mb-3">
+                    <span id="stockBadge" class="badge"></span>
+                </div>
+
+                <div class="mb-4">
+                    <div class="price-display" id="priceDisplay"></div>
+                    <div class="mrp-display" id="mrpDisplay"></div>
+                    <div id="discountBadge" class="mt-2"></div>
+                </div>
+
+                <div class="mb-4">
+                    <h5>Description</h5>
+                    <p id="productDescription" class="text-muted">No description available.</p>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary btn-lg" id="addToCartBtn" disabled>
+                        <i class="bi bi-cart-plus"></i> Add to Cart
+                    </button>
+                    <button class="btn btn-outline-secondary">
+                        <i class="bi bi-heart"></i> Add to Wishlist
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Product Attributes -->
+        <div class="row mt-5">
+            <div class="col-12">
+                <h3>Product Details</h3>
+                <div class="table-responsive">
+                    <table class="table table-striped attribute-table">
+                        <thead>
+                            <tr>
+                                <th>Attribute</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attributesTable">
+                            <!-- Attributes will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Message -->
+    <div id="errorMessage" style="display: none;">
+        <div class="alert alert-danger">
+            <i class="bi bi-exclamation-triangle"></i> <span id="errorText"></span>
+        </div>
+        <a href="{{ url_for('read_root') }}" class="btn btn-primary">Back to Products</a>
+    </div>
+</div>
+{% endblock %}
+

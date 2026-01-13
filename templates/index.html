@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}E-commerce Product Catalog{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <!-- Filters Sidebar -->
+        <div class="col-md-3 mb-4">
+            <div class="filter-sidebar">
+                <h5 class="mb-3"><i class="bi bi-funnel"></i> Filters</h5>
+                
+                <!-- Brand Filter -->
+                <div class="mb-3">
+                    <label class="form-label">Brand</label>
+                    <input type="text" class="form-control" id="filterBrand" placeholder="Search brand...">
+                </div>
+                
+                <!-- Price Range -->
+                <div class="mb-3">
+                    <label class="form-label">Price Range</label>
+                    <div class="row">
+                        <div class="col-6">
+                            <input type="number" class="form-control" id="minPrice" placeholder="Min" min="0">
+                        </div>
+                        <div class="col-6">
+                            <input type="number" class="form-control" id="maxPrice" placeholder="Max" min="0">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Stock Status -->
+                <div class="mb-3">
+                    <label class="form-label">Stock Status</label>
+                    <select class="form-select" id="filterStock">
+                        <option value="">All</option>
+                        <option value="In Stock">In Stock</option>
+                        <option value="Low Stock">Low Stock</option>
+                        <option value="Out of Stock">Out of Stock</option>
+                    </select>
+                </div>
+                
+                <!-- Category -->
+                <div class="mb-3">
+                    <label class="form-label">Category</label>
+                    <select class="form-select" id="filterCategory">
+                        <option value="">All Categories</option>
+                    </select>
+                </div>
+                
+                <!-- Sort -->
+                <div class="mb-3">
+                    <label class="form-label">Sort By</label>
+                    <select class="form-select" id="sortBy">
+                        <option value="product_id">Product ID</option>
+                        <option value="price">Price: Low to High</option>
+                        <option value="price_desc">Price: High to Low</option>
+                        <option value="title">Title: A-Z</option>
+                    </select>
+                </div>
+                
+                <button class="btn btn-primary w-100" onclick="applyFilters()">
+                    <i class="bi bi-search"></i> Apply Filters
+                </button>
+                <button class="btn btn-outline-secondary w-100 mt-2" onclick="clearFilters()">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+        
+        <!-- Products Grid -->
+        <div class="col-md-9">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2>Products</h2>
+                <div id="productCount" class="text-muted"></div>
+            </div>
+            
+            <!-- Loading Spinner -->
+            <div class="text-center loading-spinner" id="loadingSpinner">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+            
+            <!-- Products Grid -->
+            <div class="row" id="productsGrid">
+                <!-- Products will be loaded here -->
+            </div>
+            
+            <!-- Pagination -->
+            <nav aria-label="Page navigation" class="mt-4">
+                <ul class="pagination justify-content-center" id="pagination">
+                    <!-- Pagination will be generated here -->
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

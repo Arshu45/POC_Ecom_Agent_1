@@ -1,0 +1,124 @@
+/* Product Card Styles */
+.product-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+    height: 100%;
+}
+
+.product-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.product-image {
+    height: 250px;
+    object-fit: cover;
+    background-color: #f8f9fa;
+}
+
+.price-tag {
+    font-size: 1.25rem;
+    font-weight: bold;
+    color: #28a745;
+}
+
+.mrp {
+    text-decoration: line-through;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.discount-badge {
+    background-color: #dc3545;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+}
+
+.stock-badge {
+    font-size: 0.75rem;
+}
+
+/* Filter Sidebar */
+.filter-sidebar {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 1.5rem;
+}
+
+/* Chat Sidebar */
+.chat-sidebar {
+    position: fixed;
+    right: -400px;
+    top: 0;
+    width: 400px;
+    height: 100vh;
+    background: white;
+    box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+    transition: right 0.3s ease;
+    z-index: 1050;
+    overflow-y: auto;
+}
+
+.chat-sidebar.open {
+    right: 0;
+}
+
+.chat-toggle {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 1040;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+/* Loading Spinner */
+.loading-spinner {
+    display: none;
+}
+
+.loading-spinner.show {
+    display: block;
+}
+
+/* Product Detail Page Styles */
+.product-image-main {
+    width: 100%;
+    height: 500px;
+    object-fit: cover;
+    border-radius: 8px;
+}
+
+.product-thumbnail {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    cursor: pointer;
+    border: 2px solid transparent;
+    border-radius: 4px;
+}
+
+.product-thumbnail:hover,
+.product-thumbnail.active {
+    border-color: #0d6efd;
+}
+
+.attribute-table {
+    font-size: 0.9rem;
+}
+
+.price-display {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #28a745;
+}
+
+.mrp-display {
+    text-decoration: line-through;
+    color: #6c757d;
+    font-size: 1.2rem;
+}
+

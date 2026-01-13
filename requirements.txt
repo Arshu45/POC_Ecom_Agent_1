@@ -42,3 +42,11 @@ zstandard==0.25.0
 chromadb
 pandas
 sentence-transformers
+
+# Database Dependencies
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.36
+alembic==1.13.2
+
+# Template Engine
+jinja2==3.1.3
