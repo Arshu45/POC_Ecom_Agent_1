@@ -191,6 +191,22 @@ if (typeof loadProducts !== 'undefined' || document.getElementById('productsGrid
         const category = document.getElementById('filterCategory');
         if (category && category.value) currentFilters.category_id = parseInt(category.value);
 
+        // New attribute filters
+        const color = document.getElementById('filterColor');
+        if (color && color.value.trim()) currentFilters.color = color.value.trim();
+
+        const size = document.getElementById('filterSize');
+        if (size && size.value.trim()) currentFilters.size = size.value.trim();
+
+        const gender = document.getElementById('filterGender');
+        if (gender && gender.value) currentFilters.gender = gender.value;
+
+        const ageGroup = document.getElementById('filterAgeGroup');
+        if (ageGroup && ageGroup.value.trim()) currentFilters.age_group = ageGroup.value.trim();
+
+        const occasion = document.getElementById('filterOccasion');
+        if (occasion && occasion.value) currentFilters.occasion = occasion.value;
+
         const sortBy = document.getElementById('sortBy');
         if (sortBy) {
             if (sortBy.value === 'price_desc') {
@@ -215,6 +231,11 @@ if (typeof loadProducts !== 'undefined' || document.getElementById('productsGrid
         const maxPrice = document.getElementById('maxPrice');
         const filterStock = document.getElementById('filterStock');
         const filterCategory = document.getElementById('filterCategory');
+        const filterColor = document.getElementById('filterColor');
+        const filterSize = document.getElementById('filterSize');
+        const filterGender = document.getElementById('filterGender');
+        const filterAgeGroup = document.getElementById('filterAgeGroup');
+        const filterOccasion = document.getElementById('filterOccasion');
         const sortBy = document.getElementById('sortBy');
         
         if (filterBrand) filterBrand.value = '';
@@ -222,6 +243,11 @@ if (typeof loadProducts !== 'undefined' || document.getElementById('productsGrid
         if (maxPrice) maxPrice.value = '';
         if (filterStock) filterStock.value = '';
         if (filterCategory) filterCategory.value = '';
+        if (filterColor) filterColor.value = '';
+        if (filterSize) filterSize.value = '';
+        if (filterGender) filterGender.value = '';
+        if (filterAgeGroup) filterAgeGroup.value = '';
+        if (filterOccasion) filterOccasion.value = '';
         if (sortBy) sortBy.value = 'product_id';
         
         currentFilters = {};

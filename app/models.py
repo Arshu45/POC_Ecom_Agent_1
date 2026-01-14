@@ -1,9 +1,18 @@
 """SQLAlchemy database models."""
 
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Boolean, DateTime, Text
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Boolean, DateTime, Text, Enum, Numeric, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+import enum
 from app.database import Base
+
+
+class AttributeDataType(enum.Enum):
+    """Attribute data type enumeration."""
+    STRING = 'string'
+    NUMBER = 'number'
+    BOOLEAN = 'boolean'
+    ENUM = 'enum'
 
 
 class Category(Base):
@@ -41,23 +50,58 @@ class Product(Base):
     
     # Relationships
     category = relationship("Category", back_populates="products")
-    attributes = relationship("ProductAttribute", back_populates="product", cascade="all, delete-orphan")
+    attribute_values = relationship("AttributeValue", back_populates="product", cascade="all, delete-orphan")
     images = relationship("ProductImage", back_populates="product", cascade="all, delete-orphan")
 
 
-class ProductAttribute(Base):
-    """Product attribute model (key-value pairs for all other CSV columns)."""
-    __tablename__ = "product_attributes"
+class Attribute(Base):
+    """Attribute model - defines attribute metadata."""
+    __tablename__ = "attributes"
     
-    id = Column(Integer, primary_key=True, index=True)
-    product_id = Column(String(50), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False, index=True)
-    attribute_name = Column(String(255), nullable=False, index=True)
-    attribute_value = Column(Text, nullable=True)
-    attribute_type = Column(String(50), nullable=True)  # 'string', 'number', 'boolean', etc.
+    attribute_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    name = Column(String(100), nullable=False, unique=True, index=True)
+    data_type = Column(Enum(AttributeDataType), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
-    product = relationship("Product", back_populates="attributes")
+    attribute_values = relationship("AttributeValue", back_populates="attribute", cascade="all, delete-orphan")
+    options = relationship("AttributeOption", back_populates="attribute", cascade="all, delete-orphan")
+
+
+class AttributeValue(Base):
+    """AttributeValue model - stores actual attribute values for products."""
+    __tablename__ = "attribute_values"
+    
+    value_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    product_id = Column(String(50), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False, index=True)
+    attribute_id = Column(Integer, ForeignKey("attributes.attribute_id", ondelete="CASCADE"), nullable=False, index=True)
+    value_string = Column(String(255), nullable=True)
+    value_number = Column(Numeric(10, 2), nullable=True)
+    value_boolean = Column(Boolean, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Unique constraint: one value per product per attribute
+    __table_args__ = (
+        UniqueConstraint('product_id', 'attribute_id', name='uq_product_attribute'),
+    )
+    
+    # Relationships
+    product = relationship("Product", back_populates="attribute_values")
+    attribute = relationship("Attribute", back_populates="attribute_values")
+
+
+class AttributeOption(Base):
+    """AttributeOption model - stores options for enum-type attributes."""
+    __tablename__ = "attribute_options"
+    
+    option_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    attribute_id = Column(Integer, ForeignKey("attributes.attribute_id", ondelete="CASCADE"), nullable=False, index=True)
+    option_value = Column(String(100), nullable=False)
+    display_order = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    attribute = relationship("Attribute", back_populates="options")
 
 
 class ProductImage(Base):

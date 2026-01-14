@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 
 from app.database import get_db
-from app.models import Product, ProductAttribute, ProductImage, Category
-from app.schemas import ProductListItem, ProductDetail, ProductListResponse
+from app.models import Product, Attribute, AttributeValue, ProductImage, Category
+from app.schemas import ProductListItem, ProductDetail, ProductListResponse, ProductAttributeResponse
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -30,6 +30,11 @@ async def list_products(
     category_id: Optional[int] = Query(None, description="Filter by category ID"),
     min_price: Optional[float] = Query(None, ge=0, description="Minimum price"),
     max_price: Optional[float] = Query(None, ge=0, description="Maximum price"),
+    color: Optional[str] = Query(None, description="Filter by color"),
+    size: Optional[str] = Query(None, description="Filter by size"),
+    gender: Optional[str] = Query(None, description="Filter by gender (boys/girls)"),
+    age_group: Optional[str] = Query(None, description="Filter by age group (e.g., '2-3Y', '4-5Y')"),
+    occasion: Optional[str] = Query(None, description="Filter by occasion (birthday/casual/festive)"),
     sort_by: str = Query("product_id", description="Sort field (product_id, price, title)"),
     sort_order: str = Query("asc", regex="^(asc|desc)$", description="Sort order"),
     db: Session = Depends(get_db)
@@ -38,10 +43,15 @@ async def list_products(
     List all products with filtering and sorting.
     
     Supports filtering by:
-    - brand
-    - stock_status
-    - category_id
+    - brand (from Product table)
+    - stock_status (from Product table)
+    - category_id (from Product table)
     - price range (min_price, max_price)
+    - color (from AttributeValue)
+    - size (from AttributeValue)
+    - gender (from AttributeValue)
+    - age_group (from AttributeValue)
+    - occasion (from AttributeValue)
     
     Supports sorting by:
     - product_id
@@ -49,9 +59,9 @@ async def list_products(
     - title
     """
     # Build query
-    query = db.query(Product)
+    query = db.query(Product).distinct()
     
-    # Apply filters
+    # Apply filters from Product table
     if brand:
         query = query.filter(Product.brand.ilike(f"%{brand}%"))
     
@@ -66,6 +76,52 @@ async def list_products(
     
     if max_price is not None:
         query = query.filter(Product.price <= max_price)
+    
+    # Apply attribute-based filters (using subqueries for AND logic)
+    if color:
+        color_product_ids = db.query(AttributeValue.product_id).join(
+            Attribute, AttributeValue.attribute_id == Attribute.attribute_id
+        ).filter(
+            Attribute.name == 'color',
+            AttributeValue.value_string.ilike(f"%{color}%")
+        ).distinct()
+        query = query.filter(Product.product_id.in_(color_product_ids))
+    
+    if size:
+        size_product_ids = db.query(AttributeValue.product_id).join(
+            Attribute, AttributeValue.attribute_id == Attribute.attribute_id
+        ).filter(
+            Attribute.name == 'size',
+            AttributeValue.value_string.ilike(f"%{size}%")
+        ).distinct()
+        query = query.filter(Product.product_id.in_(size_product_ids))
+    
+    if gender:
+        gender_product_ids = db.query(AttributeValue.product_id).join(
+            Attribute, AttributeValue.attribute_id == Attribute.attribute_id
+        ).filter(
+            Attribute.name == 'gender',
+            AttributeValue.value_string.ilike(f"%{gender}%")
+        ).distinct()
+        query = query.filter(Product.product_id.in_(gender_product_ids))
+    
+    if age_group:
+        age_product_ids = db.query(AttributeValue.product_id).join(
+            Attribute, AttributeValue.attribute_id == Attribute.attribute_id
+        ).filter(
+            Attribute.name == 'age_group',
+            AttributeValue.value_string.ilike(f"%{age_group}%")
+        ).distinct()
+        query = query.filter(Product.product_id.in_(age_product_ids))
+    
+    if occasion:
+        occasion_product_ids = db.query(AttributeValue.product_id).join(
+            Attribute, AttributeValue.attribute_id == Attribute.attribute_id
+        ).filter(
+            Attribute.name == 'occasion',
+            AttributeValue.value_string.ilike(f"%{occasion}%")
+        ).distinct()
+        query = query.filter(Product.product_id.in_(occasion_product_ids))
     
     # Apply sorting
     if sort_by == "price":
@@ -122,10 +178,30 @@ async def get_product(
     if not product:
         raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
     
-    # Get related data
-    attributes = db.query(ProductAttribute).filter(
-        ProductAttribute.product_id == product_id
+    # Get related data - attribute values with their attribute definitions
+    attribute_values = db.query(AttributeValue).join(Attribute).filter(
+        AttributeValue.product_id == product_id
     ).all()
+    
+    # Convert AttributeValue to ProductAttributeResponse format
+    attributes = []
+    for attr_value in attribute_values:
+        # Get the value based on data type
+        if attr_value.value_string is not None:
+            attribute_value = attr_value.value_string
+        elif attr_value.value_number is not None:
+            attribute_value = str(attr_value.value_number)
+        elif attr_value.value_boolean is not None:
+            attribute_value = str(attr_value.value_boolean)
+        else:
+            attribute_value = None
+        
+        attributes.append(ProductAttributeResponse(
+            id=attr_value.value_id,
+            attribute_name=attr_value.attribute.name,
+            attribute_value=attribute_value,
+            attribute_type=attr_value.attribute.data_type.value if attr_value.attribute.data_type else None
+        ))
     
     images = db.query(ProductImage).filter(
         ProductImage.product_id == product_id
