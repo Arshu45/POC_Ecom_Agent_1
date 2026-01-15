@@ -2,13 +2,17 @@
 
 import logging
 import json
-from fastapi import FastAPI
+import os
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
 
 from app.schemas import SearchRequest, SearchResponse, ProductResult
 from app.services.agent_service import AgentService
 from app.services.product_retrieval_service import ProductRetrievalService
+from app.routers import products as products_router
 
 
 def format_price(metadata: dict) -> str:
@@ -261,7 +265,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add CORS middleware
+# Add CORS middleware (must be before routes)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Configure appropriately for production
@@ -270,14 +274,60 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include API routers (before static files to avoid conflicts)
+app.include_router(products_router.router)
 
-@app.get("/")
-async def root():
-    """Root endpoint."""
+# Mount static files for frontend
+static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+# Configure Jinja2 templates
+templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
+templates = Jinja2Templates(directory=templates_dir)
+
+# Add URL helper to template context (global)
+def url_for_static(path: str) -> str:
+    """Generate URL for static files."""
+    return f"/static/{path}"
+
+templates.env.globals["url_for_static"] = url_for_static
+
+# Serve frontend pages using Jinja2 templates
+@app.get("/", name="read_root")
+async def read_root(request: Request):
+    # Add URL helper to context
+    def url_for(name: str, **kwargs) -> str:
+        return request.url_for(name, **kwargs).path
+    
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "url_for": url_for,
+        "url_for_static": lambda path: f"/static/{path}"
+    })
+
+@app.get("/product/{product_id}", name="read_product_page")
+async def read_product_page(request: Request, product_id: str):
+    # Add URL helper to context
+    def url_for(name: str, **kwargs) -> str:
+        return request.url_for(name, **kwargs).path
+    
+    return templates.TemplateResponse("product.html", {
+        "request": request,
+        "product_id": product_id,
+        "url_for": url_for,
+        "url_for_static": lambda path: f"/static/{path}"
+    })
+
+
+@app.get("/api")
+async def api_info():
+    """API info endpoint."""
     return {
         "message": "E-commerce Product Search Agent API",
         "version": "1.0.0",
         "endpoints": {
+            "products": "/products",
+            "product_detail": "/products/{product_id}",
             "search": "/search",
             "health": "/health"
         }
