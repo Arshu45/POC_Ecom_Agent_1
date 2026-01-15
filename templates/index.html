@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}E-commerce Product Catalog{% endblock %}
+{% block title %}Products - ShopHub{% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4">
     <div class="row">
         <!-- Filters Sidebar -->
-        <div class="col-md-3 mb-4">
+        <div class="col-lg-3 mb-4">
             <div class="filter-sidebar">
-                <h5 class="mb-3"><i class="bi bi-funnel"></i> Filters</h5>
+                <h5><i class="bi bi-funnel"></i> Filters</h5>
                 
                 <!-- Brand Filter -->
                 <div class="mb-3">
@@ -19,7 +19,7 @@
                 <!-- Price Range -->
                 <div class="mb-3">
                     <label class="form-label">Price Range</label>
-                    <div class="row">
+                    <div class="row g-2">
                         <div class="col-6">
                             <input type="number" class="form-control" id="minPrice" placeholder="Min" min="0">
                         </div>
@@ -51,13 +51,13 @@
                 <!-- Color Filter -->
                 <div class="mb-3">
                     <label class="form-label">Color</label>
-                    <input type="text" class="form-control" id="filterColor" placeholder="e.g., pink, maroon, blue">
+                    <input type="text" class="form-control" id="filterColor" placeholder="e.g., pink, blue">
                 </div>
                 
                 <!-- Size Filter -->
                 <div class="mb-3">
                     <label class="form-label">Size</label>
-                    <input type="text" class="form-control" id="filterSize" placeholder="e.g., 4Y, 6Y, 2Y">
+                    <input type="text" class="form-control" id="filterSize" placeholder="e.g., 4Y, 6Y">
                 </div>
                 
                 <!-- Gender Filter -->
@@ -73,7 +73,7 @@
                 <!-- Age Group Filter -->
                 <div class="mb-3">
                     <label class="form-label">Age Group</label>
-                    <input type="text" class="form-control" id="filterAgeGroup" placeholder="e.g., 2-3Y, 4-5Y, 5-6Y">
+                    <input type="text" class="form-control" id="filterAgeGroup" placeholder="e.g., 2-3Y, 4-5Y">
                 </div>
                 
                 <!-- Occasion Filter -->
@@ -89,7 +89,7 @@
                 </div>
                 
                 <!-- Sort -->
-                <div class="mb-3">
+                <div class="mb-4">
                     <label class="form-label">Sort By</label>
                     <select class="form-select" id="sortBy">
                         <option value="product_id">Product ID</option>
@@ -99,36 +99,36 @@
                     </select>
                 </div>
                 
-                <button class="btn btn-primary w-100" onclick="applyFilters()">
+                <button class="btn btn-primary w-100 mb-2" onclick="applyFilters()">
                     <i class="bi bi-search"></i> Apply Filters
                 </button>
-                <button class="btn btn-outline-secondary w-100 mt-2" onclick="clearFilters()">
+                <button class="btn btn-outline-secondary w-100" onclick="clearFilters()">
                     <i class="bi bi-x-circle"></i> Clear
                 </button>
             </div>
         </div>
         
         <!-- Products Grid -->
-        <div class="col-md-9">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h2>Products</h2>
+        <div class="col-lg-9">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Our Products</h2>
                 <div id="productCount" class="text-muted"></div>
             </div>
             
             <!-- Loading Spinner -->
-            <div class="text-center loading-spinner" id="loadingSpinner">
+            <!-- <div class="text-center loading-spinner" id="loadingSpinner">
                 <div class="spinner-border text-primary" role="status">
                     <span class="visually-hidden">Loading...</span>
                 </div>
-            </div>
+            </div> -->
             
             <!-- Products Grid -->
-            <div class="row" id="productsGrid">
+            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4" id="productsGrid">
                 <!-- Products will be loaded here -->
             </div>
             
             <!-- Pagination -->
-            <nav aria-label="Page navigation" class="mt-4">
+            <nav aria-label="Page navigation" class="mt-5">
                 <ul class="pagination justify-content-center" id="pagination">
                     <!-- Pagination will be generated here -->
                 </ul>
@@ -137,4 +137,3 @@
     </div>
 </div>
 {% endblock %}
-
