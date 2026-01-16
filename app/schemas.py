@@ -1,4 +1,7 @@
-"""Pydantic schemas for request/response models."""
+"""
+Pydantic schemas for request/response models
+Aligned with dynamic category-attribute architecture
+"""
 
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
@@ -6,60 +9,85 @@ from datetime import datetime
 
 
 # ============================================================
-# Agent Search Schemas
+# Agent / Search Schemas
 # ============================================================
 
 class SearchRequest(BaseModel):
-    """Request schema for search endpoint."""
-    query: str = Field(..., description="User search query", min_length=1, max_length=500)
+    query: str = Field(..., min_length=1, max_length=500)
 
 
 class ProductResult(BaseModel):
-    """Product result schema with essential information only."""
-    id: str = Field(..., description="Product ID")
-    title: str = Field(..., description="Product title")
-    price: str = Field(..., description="Formatted price string")
-    key_features: List[str] = Field(default_factory=list, description="Key product features")
+    id: str
+    title: str
+    price: str
+    key_features: List[str] = Field(default_factory=list)
 
 
 class SearchResponse(BaseModel):
-    """Response schema for search endpoint."""
-    response_text: str = Field(..., description="Chatbot response text with recommendations")
-    products: List[ProductResult] = Field(default_factory=list, description="List of matching products")
-    follow_up_questions: List[str] = Field(default_factory=list, description="Suggested follow-up questions")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Response metadata")
-    success: bool = Field(True, description="Whether the request was successful")
-    error_message: Optional[str] = Field(None, description="Error message if request failed")
+    response_text: str
+    products: List[ProductResult] = Field(default_factory=list)
+    follow_up_questions: List[str] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    success: bool = True
+    error_message: Optional[str] = None
 
 
 # ============================================================
-# Product API Schemas
+# CATEGORY SCHEMAS
 # ============================================================
 
 class CategoryResponse(BaseModel):
-    """Category response schema."""
     id: int
     name: str
-    parent_category_id: Optional[int] = None
+    parent_id: Optional[int] = None
     description: Optional[str] = None
 
     class Config:
         from_attributes = True
 
 
-class ProductAttributeResponse(BaseModel):
-    """Product attribute response schema."""
-    id: int
-    attribute_name: str
-    attribute_value: Optional[str] = None
-    attribute_type: Optional[str] = None
+# ============================================================
+# ATTRIBUTE / FILTER SCHEMAS
+# ============================================================
+
+class AttributeMasterResponse(BaseModel):
+    attribute_id: int
+    name: str
+    data_type: str
+    description: Optional[str] = None
 
     class Config:
         from_attributes = True
 
 
+class CategoryAttributeResponse(BaseModel):
+    attribute: AttributeMasterResponse
+    is_required: bool
+    is_filterable: bool
+    display_order: int
+
+    class Config:
+        from_attributes = True
+
+
+class ProductAttributeResponse(BaseModel):
+    """
+    Attribute values attached to a product
+    """
+    attribute_id: int
+    attribute_name: str
+    attribute_type: str
+    value: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ============================================================
+# PRODUCT IMAGE SCHEMA
+# ============================================================
+
 class ProductImageResponse(BaseModel):
-    """Product image response schema."""
     id: int
     image_url: str
     is_primary: bool
@@ -69,8 +97,11 @@ class ProductImageResponse(BaseModel):
         from_attributes = True
 
 
+# ============================================================
+# PRODUCT SCHEMAS
+# ============================================================
+
 class ProductListItem(BaseModel):
-    """Product list item schema (minimal info for listing)."""
     product_id: str
     title: str
     brand: Optional[str] = None
@@ -87,7 +118,6 @@ class ProductListItem(BaseModel):
 
 
 class ProductDetail(ProductListItem):
-    """Product detail schema (full product info)."""
     category: Optional[CategoryResponse] = None
     attributes: List[ProductAttributeResponse] = Field(default_factory=list)
     images: List[ProductImageResponse] = Field(default_factory=list)
@@ -99,9 +129,41 @@ class ProductDetail(ProductListItem):
 
 
 class ProductListResponse(BaseModel):
-    """Product list response schema."""
     products: List[ProductListItem]
     total: int
     page: int = 1
     page_size: int = 20
 
+
+# ============================================================
+# FILTER METADATA (FACET CONFIG)
+# ============================================================
+
+class FilterOption(BaseModel):
+    value: str
+    label: str
+    count: int = 0
+
+
+class FilterConfig(BaseModel):
+    attribute_id: int
+    attribute_name: str
+    display_name: str
+    data_type: str = Field(..., description="enum | number | boolean | string")
+    filter_type: str = Field(
+        ...,
+        description="multi_select | range | toggle | text"
+    )
+
+    options: Optional[List[FilterOption]] = None
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+    is_required: bool = False
+
+
+class FiltersResponse(BaseModel):
+    """
+    Used by: GET /categories/{id}/filters
+    """
+    category: CategoryResponse
+    filters: List[FilterConfig] = Field(default_factory=list)

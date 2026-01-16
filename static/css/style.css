@@ -177,10 +177,12 @@ img {
     background-color: var(--bg-main);
     border: 1px solid var(--border-light);
     border-radius: var(--radius-lg);
-    padding: var(--space-xl);
-    height: fit-content;
     position: sticky;
     top: 100px;
+    height: calc(100vh - 120px); /* Fixed height instead of max-height */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* Prevent parent from scrolling */
     animation: fadeInUp 0.4s ease-out;
 }
 
@@ -198,9 +200,10 @@ img {
 .filter-sidebar h5 {
     font-size: 1.125rem;
     font-weight: 600;
-    margin-bottom: var(--space-lg);
-    padding-bottom: var(--space-md);
+    margin: 0;
+    padding: var(--space-xl) var(--space-xl) var(--space-md) var(--space-xl);
     border-bottom: 2px solid var(--border-light);
+    flex-shrink: 0; /* Don't shrink */
     display: flex;
     align-items: center;
     gap: var(--space-sm);
@@ -208,6 +211,43 @@ img {
 
 .filter-sidebar h5 i {
     font-size: 1.25rem;
+}
+
+/* Scrollable filter area */
+.filter-scroll {
+    flex: 1; /* Take remaining space */
+    overflow-y: auto; /* Enable scrolling */
+    overflow-x: hidden;
+    padding: var(--space-lg) var(--space-xl);
+    min-height: 0; /* Critical for Firefox flexbox scrolling */
+    scroll-behavior: smooth;
+}
+
+.filter-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+
+.filter-scroll::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-full);
+}
+
+.filter-scroll::-webkit-scrollbar-thumb {
+    background-color: var(--border-medium);
+    border-radius: var(--radius-full);
+    transition: background-color var(--transition-fast);
+}
+
+.filter-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: var(--text-secondary);
+}
+
+/* Fixed action buttons at bottom */
+.filter-actions {
+    flex-shrink: 0; /* Don't shrink */
+    padding: var(--space-md) var(--space-xl) var(--space-xl) var(--space-xl);
+    border-top: 1px solid var(--border-light);
+    background-color: var(--bg-main);
 }
 
 .form-label {
@@ -939,6 +979,12 @@ img {
     
     .filter-sidebar {
         position: static;
+        height: auto; /* Remove fixed height on mobile */
+        max-height: 600px; /* Add reasonable max-height for mobile */
+    }
+    
+    .filter-scroll {
+        max-height: 400px; /* Limit scroll area on mobile */
     }
 }
 
@@ -960,6 +1006,10 @@ img {
         width: 56px;
         height: 56px;
     }
+    
+    .filter-sidebar {
+        max-height: 500px;
+    }
 }
 
 /* =========================================
@@ -975,3 +1025,143 @@ img {
 .product-card:nth-child(7) { animation-delay: 0.35s; }
 .product-card:nth-child(8) { animation-delay: 0.4s; }
 .product-card:nth-child(9) { animation-delay: 0.45s; }
+
+/* =========================================
+   CRITICAL: Filter Sidebar Scroll Override
+   MUST BE AT END TO OVERRIDE BOOTSTRAP
+   ========================================= */
+
+/* Force filter sidebar structure */
+.filter-sidebar {
+    padding: 0 !important;
+    height: calc(100vh - 120px) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+
+/* Fixed header */
+.filter-sidebar > h5 {
+    margin: 0 !important;
+    padding: var(--space-xl) var(--space-xl) var(--space-md) var(--space-xl) !important;
+    flex-shrink: 0 !important;
+}
+
+/* Scrollable area - CRITICAL */
+.filter-scroll {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: var(--space-lg) var(--space-xl) !important;
+    min-height: 0 !important;
+}
+
+/* Fixed buttons */
+.filter-actions {
+    flex-shrink: 0 !important;
+    padding: var(--space-md) var(--space-xl) var(--space-xl) var(--space-xl) !important;
+}
+
+/* Mobile overrides */
+@media (max-width: 991px) {
+    .filter-sidebar {
+        height: auto !important;
+        max-height: 600px !important;
+    }
+}
+
+
+/* ========================================
+   FILTER SIDEBAR SCROLL FIX - ADD THIS TO YOUR style.css
+   ======================================== */
+
+/* IMPORTANT: This MUST be placed at the END of your style.css file 
+   to ensure it overrides Bootstrap styles */
+
+/* Force filter sidebar to be a flex container with fixed height */
+.filter-sidebar {
+    background-color: var(--bg-main) !important;
+    border: 1px solid var(--border-light) !important;
+    border-radius: var(--radius-lg) !important;
+    position: sticky !important;
+    top: 100px !important;
+    height: calc(100vh - 120px) !important; /* CRITICAL: Fixed height */
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important; /* CRITICAL: Prevent parent scroll */
+    animation: fadeInUp 0.4s ease-out;
+    padding: 0 !important; /* Remove all padding from parent */
+}
+
+/* Fixed header at top */
+.filter-sidebar > h5 {
+    font-size: 1.125rem !important;
+    font-weight: 600 !important;
+    margin: 0 !important;
+    padding: var(--space-xl) var(--space-xl) var(--space-md) var(--space-xl) !important;
+    border-bottom: 2px solid var(--border-light) !important;
+    flex-shrink: 0 !important; /* CRITICAL: Don't shrink */
+    display: flex !important;
+    align-items: center !important;
+    gap: var(--space-sm) !important;
+}
+
+/* Scrollable content area - THIS IS WHERE THE MAGIC HAPPENS */
+.filter-scroll {
+    flex: 1 !important; /* CRITICAL: Take all remaining space */
+    overflow-y: auto !important; /* CRITICAL: Enable vertical scrolling */
+    overflow-x: hidden !important;
+    padding: var(--space-lg) var(--space-xl) !important;
+    min-height: 0 !important; /* CRITICAL: Required for Firefox */
+    scroll-behavior: smooth !important;
+}
+
+/* Custom scrollbar styling */
+.filter-scroll::-webkit-scrollbar {
+    width: 6px !important;
+}
+
+.filter-scroll::-webkit-scrollbar-track {
+    background: var(--bg-secondary) !important;
+    border-radius: var(--radius-full) !important;
+}
+
+.filter-scroll::-webkit-scrollbar-thumb {
+    background-color: var(--border-medium) !important;
+    border-radius: var(--radius-full) !important;
+}
+
+.filter-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: var(--text-secondary) !important;
+}
+
+/* Fixed action buttons at bottom */
+.filter-actions {
+    flex-shrink: 0 !important; /* CRITICAL: Don't shrink */
+    padding: var(--space-md) var(--space-xl) var(--space-xl) var(--space-xl) !important;
+    border-top: 1px solid var(--border-light) !important;
+    background-color: var(--bg-main) !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 991px) {
+    .filter-sidebar {
+        position: static !important;
+        height: auto !important;
+        max-height: 600px !important;
+    }
+    
+    .filter-scroll {
+        max-height: 400px !important;
+    }
+}
+
+@media (max-width: 767px) {
+    .filter-sidebar {
+        max-height: 500px !important;
+    }
+}
+
+/* ========================================
+   END OF FILTER SIDEBAR SCROLL FIX
+   ======================================== */
