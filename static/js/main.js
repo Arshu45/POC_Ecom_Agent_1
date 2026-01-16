@@ -217,6 +217,206 @@ function escapeHtml(text) {
 }
 
 // ============================================
+// DYNAMIC FILTER FUNCTIONS (FIXED)
+// ============================================
+async function loadCategories() {
+  const categorySelect = document.getElementById("filterCategory");
+  if (!categorySelect) return;
+
+  const res = await fetch("/categories");
+  if (!res.ok) throw new Error("Failed to load categories");
+
+  const categories = await res.json();
+
+  categorySelect.innerHTML = `<option value="">Select Category</option>`;
+
+  categories.forEach((cat) => {
+    categorySelect.innerHTML += `
+      <option value="${cat.id}">
+        ${cat.name}
+      </option>
+    `;
+  });
+
+  if (categories.length > 0) {
+    categorySelect.value = categories[0].id;
+  }
+}
+
+async function loadDynamicFilters(categoryId) {
+  const filterContainer = document.getElementById("dynamicFilters");
+  if (!filterContainer) return;
+
+  if (!categoryId) {
+    filterContainer.innerHTML =
+      '<p class="text-muted small">Select a category to see filters.</p>';
+    return;
+  }
+
+  try {
+    const response = await fetch(`/filters?category_id=${categoryId}`);
+    if (!response.ok) throw new Error("Failed to load filters");
+
+    const data = await response.json();
+    filterContainer.innerHTML = "";
+
+    if (!data.filters || data.filters.length === 0) {
+      filterContainer.innerHTML =
+        '<p class="text-muted small">No filters available.</p>';
+      return;
+    }
+
+    filterContainer.innerHTML =
+      '<hr><h6 class="text-muted mb-3">Product Attributes</h6>';
+
+    data.filters.forEach((filter) => {
+      const html = createFilterHTML(filter);
+      if (html) filterContainer.innerHTML += html;
+    });
+    
+    // ✅ ADD EVENT LISTENERS TO DYNAMIC FILTERS
+    attachDynamicFilterListeners();
+  } catch (err) {
+    console.error("Filter load error:", err);
+    filterContainer.innerHTML =
+      '<p class="text-danger small">Error loading filters</p>';
+  }
+}
+
+// ✅ NEW FUNCTION: Attach change listeners to dynamic filters
+function attachDynamicFilterListeners() {
+  // Auto-apply on checkbox change
+  document.querySelectorAll('input[name^="filter_"][type="checkbox"]').forEach(input => {
+    input.addEventListener('change', () => {
+      console.log('Checkbox changed:', input.name, input.checked);
+    });
+  });
+  
+  // Auto-apply on range input change (with debounce)
+  let rangeTimeout;
+  document.querySelectorAll('input[name^="filter_"][type="number"]').forEach(input => {
+    input.addEventListener('input', () => {
+      clearTimeout(rangeTimeout);
+      rangeTimeout = setTimeout(() => {
+        console.log('Range changed:', input.name, input.value);
+      }, 500);
+    });
+  });
+}
+
+function clearDynamicFiltersUI() {
+  document.querySelectorAll('input[name^="filter_"]').forEach((input) => {
+    if (input.type === "checkbox") input.checked = false;
+    if (input.type === "number") input.value = "";
+  });
+}
+
+function createFilterHTML(filter) {
+  switch (filter.filter_type) {
+    case "multi_select":
+      return createMultiSelectFilter(filter);
+    case "range":
+      return createRangeFilter(filter);
+    case "toggle":
+      return createToggleFilter(filter);
+    default:
+      return "";
+  }
+}
+
+// ✅ FIXED: Don't normalize values - use original values
+function createMultiSelectFilter(filter) {
+  if (!filter.options || filter.options.length === 0) return "";
+
+  const displayOptions = filter.options.slice(0, 10);
+  const hasMore = filter.options.length > 10;
+
+  return `
+    <div class="filter-group mb-3">
+      <h6 class="filter-title">${escapeHtml(filter.display_name)}</h6>
+      <div class="filter-options">
+        ${displayOptions
+          .map((opt) => {
+            // ✅ Use original value, create safe ID
+            const safeId = `filter_${filter.attribute_name}_${opt.value.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            
+            return `
+              <div class="form-check">
+                <input class="form-check-input"
+                       type="checkbox"
+                       name="filter_${filter.attribute_name}"
+                       value="${escapeHtml(opt.value)}"
+                       id="${safeId}">
+                <label class="form-check-label" for="${safeId}">
+                  ${escapeHtml(opt.label)}
+                  ${opt.count ? `<span class="text-muted small">(${opt.count})</span>` : ""}
+                </label>
+              </div>
+            `;
+          })
+          .join("")}
+        ${
+          hasMore
+            ? `<button class="btn btn-link btn-sm p-0" onclick="showMoreOptions('${filter.attribute_name}')">Show more…</button>`
+            : ""
+        }
+      </div>
+    </div>
+  `;
+}
+
+function createRangeFilter(filter) {
+  if (filter.min_value === null || filter.max_value === null) return "";
+
+  return `
+    <div class="filter-group mb-3">
+      <h6 class="filter-title">${escapeHtml(filter.display_name)}</h6>
+      <div class="row g-2">
+        <div class="col-6">
+          <input type="number" 
+                 class="form-control form-control-sm" 
+                 name="filter_${filter.attribute_name}_min"
+                 placeholder="Min: ${filter.min_value}"
+                 min="${filter.min_value}"
+                 max="${filter.max_value}"
+                 step="any">
+        </div>
+        <div class="col-6">
+          <input type="number" 
+                 class="form-control form-control-sm" 
+                 name="filter_${filter.attribute_name}_max"
+                 placeholder="Max: ${filter.max_value}"
+                 min="${filter.min_value}"
+                 max="${filter.max_value}"
+                 step="any">
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function createToggleFilter(filter) {
+  return `
+    <div class="filter-group mb-3">
+      <div class="form-check form-switch">
+        <input class="form-check-input" 
+               type="checkbox" 
+               name="filter_${filter.attribute_name}"
+               id="filter_${filter.attribute_name}">
+        <label class="form-check-label" for="filter_${filter.attribute_name}">
+          ${escapeHtml(filter.display_name)}
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function showMoreOptions(attributeName) {
+  console.log("Show more options for:", attributeName);
+  // TODO: Implement expand functionality
+}
+
+// ============================================
 // PRODUCT LISTING FUNCTIONS
 // ============================================
 
@@ -234,6 +434,9 @@ async function loadProducts(page = 1) {
     page_size: 12,
     ...currentFilters,
   });
+
+  console.log('Loading products with filters:', currentFilters);
+  console.log('Request URL:', `/products?${params}`);
 
   try {
     const response = await fetch(`/products?${params}`);
@@ -364,10 +567,10 @@ function updatePagination(total, page, pageSize) {
 
   pagination.innerHTML = html;
 
-  pagination.querySelectorAll('a.page-link').forEach(link => {
-    link.addEventListener('click', function(e) {
+  pagination.querySelectorAll("a.page-link").forEach((link) => {
+    link.addEventListener("click", function (e) {
       e.preventDefault();
-      const pageNum = parseInt(this.getAttribute('data-page'));
+      const pageNum = parseInt(this.getAttribute("data-page"));
       if (pageNum && pageNum > 0) {
         loadProducts(pageNum);
       }
@@ -375,8 +578,13 @@ function updatePagination(total, page, pageSize) {
   });
 }
 
+// ✅ FIXED: Properly collect dynamic filters
 function applyFilters() {
   currentFilters = {};
+  
+  // Static filters
+  const category = document.getElementById("filterCategory");
+  if (category && category.value) currentFilters.category_id = parseInt(category.value);
 
   const brand = document.getElementById("filterBrand");
   if (brand && brand.value.trim()) currentFilters.brand = brand.value.trim();
@@ -389,24 +597,6 @@ function applyFilters() {
 
   const stock = document.getElementById("filterStock");
   if (stock && stock.value) currentFilters.stock_status = stock.value;
-
-  const category = document.getElementById("filterCategory");
-  if (category && category.value) currentFilters.category_id = parseInt(category.value);
-
-  const color = document.getElementById("filterColor");
-  if (color && color.value.trim()) currentFilters.color = color.value.trim();
-
-  const size = document.getElementById("filterSize");
-  if (size && size.value.trim()) currentFilters.size = size.value.trim();
-
-  const gender = document.getElementById("filterGender");
-  if (gender && gender.value) currentFilters.gender = gender.value;
-
-  const ageGroup = document.getElementById("filterAgeGroup");
-  if (ageGroup && ageGroup.value.trim()) currentFilters.age_group = ageGroup.value.trim();
-
-  const occasion = document.getElementById("filterOccasion");
-  if (occasion && occasion.value) currentFilters.occasion = occasion.value;
 
   const sortBy = document.getElementById("sortBy");
   if (sortBy) {
@@ -422,23 +612,81 @@ function applyFilters() {
     }
   }
 
+  // ✅ FIXED: Collect dynamic attribute filters
+  const attributeFilters = {};
+
+  // Multi-select checkboxes (NOT toggles)
+  document.querySelectorAll('input[type="checkbox"][name^="filter_"]:checked').forEach((input) => {
+    // Skip toggle switches
+    if (input.parentElement.classList.contains("form-switch")) {
+      return;
+    }
+    
+    const attrName = input.name.replace("filter_", "");
+    if (!attributeFilters[attrName]) {
+      attributeFilters[attrName] = [];
+    }
+    // ✅ Use original value, not normalized
+    attributeFilters[attrName].push(input.value);
+  });
+
+  // Range inputs
+  document.querySelectorAll('input[type="number"][name^="filter_"]').forEach((input) => {
+    const matches = input.name.match(/filter_(.+)_(min|max)/);
+    if (matches && input.value) {
+      const attrName = matches[1];
+      const rangeType = matches[2];
+
+      if (!attributeFilters[attrName]) {
+        attributeFilters[attrName] = {};
+      }
+      attributeFilters[attrName][rangeType] = parseFloat(input.value);
+    }
+  });
+
+  // Toggle switches
+  document.querySelectorAll('.form-switch input[type="checkbox"][name^="filter_"]:checked').forEach((input) => {
+    const attrName = input.name.replace("filter_", "");
+    attributeFilters[attrName] = true;
+  });
+
+  // Clean up empty filters
+  Object.keys(attributeFilters).forEach((key) => {
+    const val = attributeFilters[key];
+    if (
+      (Array.isArray(val) && val.length === 0) ||
+      (typeof val === "object" && !Array.isArray(val) && Object.keys(val).length === 0)
+    ) {
+      delete attributeFilters[key];
+    }
+  });
+
+  // Add to currentFilters as JSON string
+  if (Object.keys(attributeFilters).length > 0) {
+    currentFilters.filters = JSON.stringify(attributeFilters);
+  }
+
+  console.log('Applied filters:', currentFilters);
+  console.log('Attribute filters:', attributeFilters);
+
   currentPage = 1;
   loadProducts(1);
 }
 
 function clearFilters() {
-  const filterIds = [
-    "filterBrand", "minPrice", "maxPrice", "filterStock", "filterCategory",
-    "filterColor", "filterSize", "filterGender", "filterAgeGroup", "filterOccasion"
-  ];
+  // Clear static filters
+  const filterIds = ["filterBrand", "minPrice", "maxPrice", "filterStock", "filterCategory"];
 
-  filterIds.forEach(id => {
+  filterIds.forEach((id) => {
     const element = document.getElementById(id);
     if (element) element.value = "";
   });
 
   const sortBy = document.getElementById("sortBy");
   if (sortBy) sortBy.value = "product_id";
+
+  // Clear dynamic filters
+  clearDynamicFiltersUI();
 
   currentFilters = {};
   currentPage = 1;
@@ -466,10 +714,15 @@ async function loadProductDetails(productId) {
     const productTitle = document.getElementById("productTitle");
     const productBrand = document.getElementById("productBrand");
     const productType = document.getElementById("productType");
+    const productDescription = document.getElementById("productDescription");
 
     if (productTitle) productTitle.textContent = product.title;
     if (productBrand) productBrand.textContent = product.brand || "Unknown Brand";
     if (productType) productType.textContent = product.product_type || "N/A";
+
+    if (productDescription) {
+      productDescription.textContent = product.description || "No description available.";
+    }
 
     const stockBadge = document.getElementById("stockBadge");
     if (stockBadge) {
@@ -534,20 +787,25 @@ async function loadProductDetails(productId) {
     }
 
     const attributesTable = document.getElementById("attributesTable");
+
     if (attributesTable) {
+      attributesTable.innerHTML = "";
+
       if (product.attributes && product.attributes.length > 0) {
         product.attributes.forEach((attr) => {
           const row = document.createElement("tr");
           row.innerHTML = `
             <td><strong>${formatAttributeName(attr.attribute_name)}</strong></td>
-            <td>${attr.attribute_value || "N/A"}</td>
+            <td>${attr.value ?? "N/A"}</td>
           `;
           attributesTable.appendChild(row);
         });
       } else {
-        attributesTable.innerHTML = '<tr><td colspan="2" class="text-muted">No attributes available</td></tr>';
+        attributesTable.innerHTML =
+          '<tr><td colspan="2" class="text-muted">No attributes available</td></tr>';
       }
     }
+
 
     const addToCartBtn = document.getElementById("addToCartBtn");
     if (addToCartBtn) {
@@ -581,53 +839,100 @@ function formatAttributeName(name) {
 // INITIALIZATION
 // ============================================
 
-document.addEventListener("DOMContentLoaded", function () {
-  // Initialize chat
+
+document.addEventListener("DOMContentLoaded", async function () {
+  // ============================
+  // CHAT INITIALIZATION
+  // ============================
   const chatToggleBtn = document.getElementById("chatToggleBtn");
   const closeChatBtn = document.getElementById("closeChatBtn");
   const chatSendBtn = document.getElementById("chatSendBtn");
   const chatInput = document.getElementById("chatInput");
 
-  if (chatToggleBtn) {
-    chatToggleBtn.addEventListener("click", toggleChat);
-  }
+  if (chatToggleBtn) chatToggleBtn.addEventListener("click", toggleChat);
+  if (closeChatBtn) closeChatBtn.addEventListener("click", toggleChat);
+  if (chatSendBtn) chatSendBtn.addEventListener("click", sendChatMessage);
+  if (chatInput) chatInput.addEventListener("keypress", handleChatKeyPress);
 
-  if (closeChatBtn) {
-    closeChatBtn.addEventListener("click", toggleChat);
-  }
-
-  if (chatSendBtn) {
-    chatSendBtn.addEventListener("click", sendChatMessage);
-  }
-
-  if (chatInput) {
-    chatInput.addEventListener("keypress", handleChatKeyPress);
-  }
-
-  // Initialize product listing page
+  // ============================
+  // PRODUCT LISTING PAGE
+  // ============================
   const productsGrid = document.getElementById("productsGrid");
   if (productsGrid) {
-    loadProducts();
-    
-    const applyFiltersBtn = document.getElementById("applyFiltersBtn");
-    const clearFiltersBtn = document.getElementById("clearFiltersBtn");
-    
-    if (applyFiltersBtn) {
-      applyFiltersBtn.addEventListener("click", applyFilters);
-    }
-    
-    if (clearFiltersBtn) {
-      clearFiltersBtn.addEventListener("click", clearFilters);
+    try {
+      // 1️⃣ Load categories FIRST
+      await loadCategories();
+
+      // 2️⃣ Read selected category (auto-selected or user-selected)
+      const categorySelect = document.getElementById("filterCategory");
+      const categoryId = categorySelect?.value
+        ? parseInt(categorySelect.value)
+        : null;
+
+      // 3️⃣ Load filters ONLY if category exists
+      if (categoryId) {
+        await loadDynamicFilters(categoryId);
+      }
+
+      // 4️⃣ Load products
+      loadProducts(1);
+
+      // ============================
+      // FILTER BUTTONS
+      // ============================
+      const applyFiltersBtn = document.getElementById("applyFiltersBtn");
+      const clearFiltersBtn = document.getElementById("clearFiltersBtn");
+
+      if (applyFiltersBtn) {
+        applyFiltersBtn.addEventListener("click", applyFilters);
+      }
+
+      if (clearFiltersBtn) {
+        clearFiltersBtn.addEventListener("click", clearFilters);
+      }
+
+      // ============================
+      // CATEGORY CHANGE HANDLER
+      // ============================
+      if (categorySelect) {
+        categorySelect.addEventListener("change", async function () {
+          const newCategoryId = this.value ? parseInt(this.value) : null;
+
+          // Reset state
+          currentFilters = {};
+          clearDynamicFiltersUI();
+
+          if (newCategoryId) {
+            await loadDynamicFilters(newCategoryId);
+          }
+
+          loadProducts(1);
+        });
+      }
+    } catch (err) {
+      console.error("Initialization error:", err);
     }
   }
 
-  // Initialize product detail page
+  // ============================
+  // PRODUCT DETAIL PAGE
+  // ============================
   const productContainer = document.getElementById("productContainer");
   if (productContainer) {
     const pathParts = window.location.pathname.split("/");
     const productId = pathParts[pathParts.length - 1];
-    if (productId && productId !== "product.html" && productId !== "") {
+
+    if (productId && productId !== "product.html") {
       loadProductDetails(productId);
     }
   }
+
+  // ============================
+  // ENTER KEY = APPLY FILTERS
+  // ============================
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && e.target.closest(".filter-group")) {
+      applyFilters();
+    }
+  });
 });

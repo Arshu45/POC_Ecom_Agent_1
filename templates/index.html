@@ -4,32 +4,47 @@
 
 {% block content %}
 <div class="container-fluid mt-4">
-    <div class="row">
-        <!-- Filters Sidebar -->
-        <div class="col-lg-3 mb-4">
-            <div class="filter-sidebar">
-                <h5><i class="bi bi-funnel"></i> Filters</h5>
-                
-                <!-- Brand Filter -->
+  <div class="row">
+
+    <!-- ========================= -->
+    <!-- FILTERS SIDEBAR -->
+    <!-- ========================= -->
+    <div class="col-lg-3 mb-4">
+        <div class="filter-sidebar">
+
+            <h5><i class="bi bi-funnel"></i> Filters</h5>
+
+            <!-- SCROLLABLE AREA -->
+            <div class="filter-scroll">
+
+                <!-- Category -->
+                <div class="mb-3">
+                    <label class="form-label">Category</label>
+                    <select class="form-select" id="filterCategory">
+                        <option value="">All Categories</option>
+                    </select>
+                </div>
+
+                <!-- Brand -->
                 <div class="mb-3">
                     <label class="form-label">Brand</label>
-                    <input type="text" class="form-control" id="filterBrand" placeholder="Search brand...">
+                    <input type="text" class="form-control" id="filterBrand" placeholder="Search brand..." />
                 </div>
-                
-                <!-- Price Range -->
+
+                <!-- Price -->
                 <div class="mb-3">
                     <label class="form-label">Price Range</label>
                     <div class="row g-2">
                         <div class="col-6">
-                            <input type="number" class="form-control" id="minPrice" placeholder="Min" min="0">
+                            <input type="number" class="form-control" id="minPrice" placeholder="Min" />
                         </div>
                         <div class="col-6">
-                            <input type="number" class="form-control" id="maxPrice" placeholder="Max" min="0">
+                            <input type="number" class="form-control" id="maxPrice" placeholder="Max" />
                         </div>
                     </div>
                 </div>
-                
-                <!-- Stock Status -->
+
+                <!-- Stock -->
                 <div class="mb-3">
                     <label class="form-label">Stock Status</label>
                     <select class="form-select" id="filterStock">
@@ -39,101 +54,61 @@
                         <option value="Out of Stock">Out of Stock</option>
                     </select>
                 </div>
-                
-                <!-- Category -->
-                <div class="mb-3">
-                    <label class="form-label">Category</label>
-                    <select class="form-select" id="filterCategory">
-                        <option value="">All Categories</option>
-                    </select>
-                </div>
-                
-                <!-- Color Filter -->
-                <div class="mb-3">
-                    <label class="form-label">Color</label>
-                    <input type="text" class="form-control" id="filterColor" placeholder="e.g., pink, blue">
-                </div>
-                
-                <!-- Size Filter -->
-                <div class="mb-3">
-                    <label class="form-label">Size</label>
-                    <input type="text" class="form-control" id="filterSize" placeholder="e.g., 4Y, 6Y">
-                </div>
-                
-                <!-- Gender Filter -->
-                <div class="mb-3">
-                    <label class="form-label">Gender</label>
-                    <select class="form-select" id="filterGender">
-                        <option value="">All</option>
-                        <option value="boys">Boys</option>
-                        <option value="girls">Girls</option>
-                    </select>
-                </div>
-                
-                <!-- Age Group Filter -->
-                <div class="mb-3">
-                    <label class="form-label">Age Group</label>
-                    <input type="text" class="form-control" id="filterAgeGroup" placeholder="e.g., 2-3Y, 4-5Y">
-                </div>
-                
-                <!-- Occasion Filter -->
-                <div class="mb-3">
-                    <label class="form-label">Occasion</label>
-                    <select class="form-select" id="filterOccasion">
-                        <option value="">All</option>
-                        <option value="birthday">Birthday</option>
-                        <option value="casual">Casual</option>
-                        <option value="festive">Festive</option>
-                        <option value="party">Party</option>
-                    </select>
-                </div>
-                
+
+                <!-- Dynamic Filters -->
+                <div id="dynamicFilters"></div>
+
                 <!-- Sort -->
-                <div class="mb-4">
+                <div class="mb-3">
                     <label class="form-label">Sort By</label>
                     <select class="form-select" id="sortBy">
                         <option value="product_id">Product ID</option>
                         <option value="price">Price: Low to High</option>
                         <option value="price_desc">Price: High to Low</option>
-                        <option value="title">Title: A-Z</option>
                     </select>
                 </div>
-                
-                <button class="btn btn-primary w-100 mb-2" onclick="applyFilters()">
-                    <i class="bi bi-search"></i> Apply Filters
+
+            </div>
+
+            <!-- FIXED ACTIONS -->
+            <div class="filter-actions">
+                <button class="btn btn-primary w-100 mb-2" id="applyFiltersBtn">
+                    Apply Filters
                 </button>
-                <button class="btn btn-outline-secondary w-100" onclick="clearFilters()">
-                    <i class="bi bi-x-circle"></i> Clear
+                <button class="btn btn-outline-secondary w-100" id="clearFiltersBtn">
+                    Clear
                 </button>
             </div>
-        </div>
-        
-        <!-- Products Grid -->
-        <div class="col-lg-9">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2>Our Products</h2>
-                <div id="productCount" class="text-muted"></div>
-            </div>
-            
-            <!-- Loading Spinner -->
-            <!-- <div class="text-center loading-spinner" id="loadingSpinner">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-            </div> -->
-            
-            <!-- Products Grid -->
-            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4" id="productsGrid">
-                <!-- Products will be loaded here -->
-            </div>
-            
-            <!-- Pagination -->
-            <nav aria-label="Page navigation" class="mt-5">
-                <ul class="pagination justify-content-center" id="pagination">
-                    <!-- Pagination will be generated here -->
-                </ul>
-            </nav>
+
         </div>
     </div>
+
+
+    <!-- ========================= -->
+    <!-- PRODUCTS GRID -->
+    <!-- ========================= -->
+    <div class="col-lg-9">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Our Products</h2>
+        <div id="productCount" class="text-muted"></div>
+      </div>
+
+      <!-- Products Grid -->
+      <div
+        class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4"
+        id="productsGrid"
+      >
+        <!-- Products loaded dynamically -->
+      </div>
+
+      <!-- Pagination -->
+      <nav aria-label="Page navigation" class="mt-5">
+        <ul class="pagination justify-content-center" id="pagination">
+          <!-- Pagination injected dynamically -->
+        </ul>
+      </nav>
+    </div>
+
+  </div>
 </div>
 {% endblock %}

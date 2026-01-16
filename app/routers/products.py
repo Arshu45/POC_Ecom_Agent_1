@@ -1,219 +1,351 @@
-"""Product API endpoints."""
+"""
+Product API endpoints with dynamic category-based filtering
+"""
 
-from typing import Optional, List
+import json
+from typing import Optional, Dict, Any
+
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+from sqlalchemy import exists, func
 
 from app.database import get_db
-from app.models import Product, Attribute, AttributeValue, ProductImage, Category
-from app.schemas import ProductListItem, ProductDetail, ProductListResponse, ProductAttributeResponse
+from app.models import (
+    Product,
+    Category,
+    Attribute,
+    AttributeValue,
+    CategoryAttribute,
+    ProductImage,
+    AttributeDataType,
+)
+from app.schemas import (
+    ProductListItem,
+    ProductDetail,
+    ProductListResponse,
+    ProductAttributeResponse,
+)
 
 router = APIRouter(prefix="/products", tags=["products"])
 
 
+# ============================================================
+# HELPERS
+# ============================================================
+
 def get_primary_image_url(product_id: str, db: Session) -> Optional[str]:
-    """Get primary image URL for a product."""
-    image = db.query(ProductImage).filter(
-        ProductImage.product_id == product_id,
-        ProductImage.is_primary == True
-    ).first()
+    image = (
+        db.query(ProductImage)
+        .filter(
+            ProductImage.product_id == product_id,
+            ProductImage.is_primary.is_(True),
+        )
+        .first()
+    )
     return image.image_url if image else None
 
 
-@router.get("", response_model=ProductListResponse)
-async def list_products(
-    page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
-    brand: Optional[str] = Query(None, description="Filter by brand"),
-    stock_status: Optional[str] = Query(None, description="Filter by stock status"),
-    category_id: Optional[int] = Query(None, description="Filter by category ID"),
-    min_price: Optional[float] = Query(None, ge=0, description="Minimum price"),
-    max_price: Optional[float] = Query(None, ge=0, description="Maximum price"),
-    color: Optional[str] = Query(None, description="Filter by color"),
-    size: Optional[str] = Query(None, description="Filter by size"),
-    gender: Optional[str] = Query(None, description="Filter by gender (boys/girls)"),
-    age_group: Optional[str] = Query(None, description="Filter by age group (e.g., '2-3Y', '4-5Y')"),
-    occasion: Optional[str] = Query(None, description="Filter by occasion (birthday/casual/festive)"),
-    sort_by: str = Query("product_id", description="Sort field (product_id, price, title)"),
-    sort_order: str = Query("asc", regex="^(asc|desc)$", description="Sort order"),
-    db: Session = Depends(get_db)
+def apply_attribute_filters(
+    query,
+    filter_dict: Dict[str, Any],
+    category_id: int,
+    db: Session,
 ):
     """
-    List all products with filtering and sorting.
-    
-    Supports filtering by:
-    - brand (from Product table)
-    - stock_status (from Product table)
-    - category_id (from Product table)
-    - price range (min_price, max_price)
-    - color (from AttributeValue)
-    - size (from AttributeValue)
-    - gender (from AttributeValue)
-    - age_group (from AttributeValue)
-    - occasion (from AttributeValue)
-    
-    Supports sorting by:
-    - product_id
-    - price
-    - title
+    Apply dynamic attribute filters using CategoryAttribute mapping.
+    Ensures:
+    - Only category-allowed attributes are used
+    - ENUM / NUMBER / BOOLEAN / STRING are handled correctly
+    - Case-insensitive string matching
     """
-    # Build query
-    query = db.query(Product).distinct()
+
+    # Load allowed attributes for category
+    allowed_attrs = {
+        ca.attribute.name: ca.attribute
+        for ca in (
+            db.query(CategoryAttribute)
+            .join(Attribute)
+            .filter(
+                CategoryAttribute.category_id == category_id,
+                CategoryAttribute.is_filterable.is_(True),
+            )
+            .all()
+        )
+    }
+
+    for attr_name, values in filter_dict.items():
+        attribute = allowed_attrs.get(attr_name)
+
+        if not attribute or values is None:
+            continue
+
+        # =======================
+        # ENUM (multi-select)
+        # =======================
+        if attribute.data_type == AttributeDataType.ENUM:
+            if not isinstance(values, list):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Attribute '{attr_name}' expects a list",
+                )
+
+            # ✅ FIX: Case-insensitive matching
+            # Convert filter values to lowercase for comparison
+            lower_values = [v.lower() for v in values]
+            
+            query = query.filter(
+                exists().where(
+                    AttributeValue.product_id == Product.product_id,
+                    AttributeValue.attribute_id == attribute.attribute_id,
+                    func.lower(AttributeValue.value_string).in_(lower_values),
+                )
+            )
+
+        # =======================
+        # NUMBER (range)
+        # =======================
+        elif attribute.data_type == AttributeDataType.NUMBER:
+            if not isinstance(values, dict):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Attribute '{attr_name}' expects min/max object",
+                )
+
+            conditions = [
+                AttributeValue.product_id == Product.product_id,
+                AttributeValue.attribute_id == attribute.attribute_id,
+            ]
+
+            if values.get("min") is not None:
+                conditions.append(AttributeValue.value_number >= values["min"])
+            if values.get("max") is not None:
+                conditions.append(AttributeValue.value_number <= values["max"])
+
+            query = query.filter(exists().where(*conditions))
+
+        # =======================
+        # BOOLEAN
+        # =======================
+        elif attribute.data_type == AttributeDataType.BOOLEAN:
+            if not isinstance(values, bool):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Attribute '{attr_name}' expects boolean",
+                )
+
+            query = query.filter(
+                exists().where(
+                    AttributeValue.product_id == Product.product_id,
+                    AttributeValue.attribute_id == attribute.attribute_id,
+                    AttributeValue.value_boolean == values,
+                )
+            )
+
+        # =======================
+        # STRING (text search)
+        # =======================
+        elif attribute.data_type == AttributeDataType.STRING:
+            if not isinstance(values, str):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Attribute '{attr_name}' expects string",
+                )
+
+            query = query.filter(
+                exists().where(
+                    AttributeValue.product_id == Product.product_id,
+                    AttributeValue.attribute_id == attribute.attribute_id,
+                    AttributeValue.value_string.ilike(f"%{values}%"),
+                )
+            )
+
+    return query
+
+
+# ============================================================
+# LIST PRODUCTS
+# ============================================================
+
+@router.get("", response_model=ProductListResponse)
+async def list_products(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(12, ge=1, le=100),
+
+    brand: Optional[str] = None,
+    stock_status: Optional[str] = None,
+    category_id: Optional[int] = Query(None, description="Required for filters"),
+    min_price: Optional[float] = Query(None, ge=0),
+    max_price: Optional[float] = Query(None, ge=0),
+
+    filters: Optional[str] = Query(
+        None,
+        description='{"color":["pink"],"gsm":{"min":120,"max":180}}',
+    ),
+
+    sort_by: str = Query("product_id"),
+    sort_order: str = Query("asc", regex="^(asc|desc)$"),
+
+    db: Session = Depends(get_db),
+):
+    """
+    List products with static and dynamic filtering.
     
-    # Apply filters from Product table
+    Example filters param:
+    {
+        "color": ["Peach", "Pink"],
+        "gender": ["Girls"],
+        "gsm": {"min": 100, "max": 200},
+        "skin_friendly": true
+    }
+    """
+    
+    # ✅ ADD: Debug logging
+    # print(f"[PRODUCTS] Received filters: {filters}")
+    # print(f"[PRODUCTS] Category ID: {category_id}")
+    
+    if filters and not category_id:
+        raise HTTPException(
+            status_code=400,
+            detail="category_id is required when using dynamic filters",
+        )
+
+    query = db.query(Product)
+
+    # =======================
+    # STATIC FILTERS
+    # =======================
     if brand:
         query = query.filter(Product.brand.ilike(f"%{brand}%"))
-    
+
     if stock_status:
-        query = query.filter(Product.stock_status.ilike(f"%{stock_status}%"))
-    
+        query = query.filter(Product.stock_status == stock_status)
+
     if category_id:
         query = query.filter(Product.category_id == category_id)
-    
+
     if min_price is not None:
         query = query.filter(Product.price >= min_price)
-    
+
     if max_price is not None:
         query = query.filter(Product.price <= max_price)
-    
-    # Apply attribute-based filters (using subqueries for AND logic)
-    if color:
-        color_product_ids = db.query(AttributeValue.product_id).join(
-            Attribute, AttributeValue.attribute_id == Attribute.attribute_id
-        ).filter(
-            Attribute.name == 'color',
-            AttributeValue.value_string.ilike(f"%{color}%")
-        ).distinct()
-        query = query.filter(Product.product_id.in_(color_product_ids))
-    
-    if size:
-        size_product_ids = db.query(AttributeValue.product_id).join(
-            Attribute, AttributeValue.attribute_id == Attribute.attribute_id
-        ).filter(
-            Attribute.name == 'size',
-            AttributeValue.value_string.ilike(f"%{size}%")
-        ).distinct()
-        query = query.filter(Product.product_id.in_(size_product_ids))
-    
-    if gender:
-        gender_product_ids = db.query(AttributeValue.product_id).join(
-            Attribute, AttributeValue.attribute_id == Attribute.attribute_id
-        ).filter(
-            Attribute.name == 'gender',
-            AttributeValue.value_string.ilike(f"%{gender}%")
-        ).distinct()
-        query = query.filter(Product.product_id.in_(gender_product_ids))
-    
-    if age_group:
-        age_product_ids = db.query(AttributeValue.product_id).join(
-            Attribute, AttributeValue.attribute_id == Attribute.attribute_id
-        ).filter(
-            Attribute.name == 'age_group',
-            AttributeValue.value_string.ilike(f"%{age_group}%")
-        ).distinct()
-        query = query.filter(Product.product_id.in_(age_product_ids))
-    
-    if occasion:
-        occasion_product_ids = db.query(AttributeValue.product_id).join(
-            Attribute, AttributeValue.attribute_id == Attribute.attribute_id
-        ).filter(
-            Attribute.name == 'occasion',
-            AttributeValue.value_string.ilike(f"%{occasion}%")
-        ).distinct()
-        query = query.filter(Product.product_id.in_(occasion_product_ids))
-    
-    # Apply sorting
-    if sort_by == "price":
-        order_by = Product.price.desc() if sort_order == "desc" else Product.price.asc()
-    elif sort_by == "title":
-        order_by = Product.title.desc() if sort_order == "desc" else Product.title.asc()
-    else:  # product_id
-        order_by = Product.product_id.desc() if sort_order == "desc" else Product.product_id.asc()
-    
-    query = query.order_by(order_by)
-    
-    # Get total count
+
+    # =======================
+    # DYNAMIC FILTERS
+    # =======================
+    if filters:
+        try:
+            filter_dict = json.loads(filters)
+            # print(f"[PRODUCTS] Parsed filter_dict: {filter_dict}")  # ✅ Debug
+        except Exception as e:
+            print(f"[PRODUCTS] JSON parse error: {e}")  # ✅ Debug
+            raise HTTPException(status_code=400, detail="Invalid filters JSON")
+
+        query = apply_attribute_filters(
+            query=query,
+            filter_dict=filter_dict,
+            category_id=category_id,
+            db=db,
+        )
+
+    # Prevent duplicates from EXISTS joins
+    query = query.distinct(Product.product_id)
+
+    # =======================
+    # SORTING
+    # =======================
+    sort_col = {
+        "price": Product.price,
+        "title": Product.title,
+    }.get(sort_by, Product.product_id)
+
+    query = query.order_by(
+        sort_col.desc() if sort_order == "desc" else sort_col.asc()
+    )
+
+    # =======================
+    # PAGINATION
+    # =======================
     total = query.count()
     
-    # Apply pagination
-    offset = (page - 1) * page_size
-    products = query.offset(offset).limit(page_size).all()
-    
-    # Format response
-    product_items = []
-    for product in products:
-        primary_image = get_primary_image_url(product.product_id, db)
-        product_items.append(ProductListItem(
-            product_id=product.product_id,
-            title=product.title,
-            brand=product.brand,
-            product_type=product.product_type,
-            price=product.price,
-            mrp=product.mrp,
-            discount_percent=product.discount_percent,
-            currency=product.currency,
-            stock_status=product.stock_status,
-            primary_image=primary_image
-        ))
-    
+    print(f"[PRODUCTS] Total results after filtering: {total}")  # ✅ Debug
+
+    products = (
+        query.offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    items = [
+        ProductListItem(
+            product_id=p.product_id,
+            title=p.title,
+            brand=p.brand,
+            product_type=p.product_type,
+            price=p.price,
+            mrp=p.mrp,
+            discount_percent=p.discount_percent,
+            currency=p.currency,
+            stock_status=p.stock_status,
+            primary_image=get_primary_image_url(p.product_id, db),
+        )
+        for p in products
+    ]
+
     return ProductListResponse(
-        products=product_items,
+        products=items,
         total=total,
         page=page,
-        page_size=page_size
+        page_size=page_size,
     )
 
 
+# ============================================================
+# PRODUCT DETAIL
+# ============================================================
+
 @router.get("/{product_id}", response_model=ProductDetail)
-async def get_product(
-    product_id: str,
-    db: Session = Depends(get_db)
-):
-    """
-    Get single product details with all attributes.
-    """
-    product = db.query(Product).filter(Product.product_id == product_id).first()
-    
+async def get_product(product_id: str, db: Session = Depends(get_db)):
+    product = (
+        db.query(Product)
+        .filter(Product.product_id == product_id)
+        .first()
+    )
+
     if not product:
-        raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
-    
-    # Get related data - attribute values with their attribute definitions
-    attribute_values = db.query(AttributeValue).join(Attribute).filter(
-        AttributeValue.product_id == product_id
-    ).all()
-    
-    # Convert AttributeValue to ProductAttributeResponse format
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    attribute_values = (
+        db.query(AttributeValue)
+        .join(Attribute)
+        .filter(AttributeValue.product_id == product_id)
+        .all()
+    )
+
     attributes = []
-    for attr_value in attribute_values:
-        # Get the value based on data type
-        if attr_value.value_string is not None:
-            attribute_value = attr_value.value_string
-        elif attr_value.value_number is not None:
-            attribute_value = str(attr_value.value_number)
-        elif attr_value.value_boolean is not None:
-            attribute_value = str(attr_value.value_boolean)
+    for av in attribute_values:
+        if av.value_string is not None:
+            val = av.value_string
+        elif av.value_number is not None:
+            val = str(av.value_number)
         else:
-            attribute_value = None
-        
-        attributes.append(ProductAttributeResponse(
-            id=attr_value.value_id,
-            attribute_name=attr_value.attribute.name,
-            attribute_value=attribute_value,
-            attribute_type=attr_value.attribute.data_type.value if attr_value.attribute.data_type else None
-        ))
-    
-    images = db.query(ProductImage).filter(
-        ProductImage.product_id == product_id
-    ).order_by(ProductImage.display_order, ProductImage.is_primary.desc()).all()
-    
-    category = None
-    if product.category_id:
-        category = db.query(Category).filter(Category.id == product.category_id).first()
-    
-    # Build response
-    primary_image = get_primary_image_url(product_id, db)
-    
+            val = str(av.value_boolean)
+
+        attributes.append(
+            ProductAttributeResponse(
+                attribute_id=av.attribute.attribute_id,
+                attribute_name=av.attribute.name,
+                attribute_type=av.attribute.data_type.value,
+                value=val,
+            )
+        )
+
+    images = (
+        db.query(ProductImage)
+        .filter(ProductImage.product_id == product_id)
+        .order_by(ProductImage.is_primary.desc(), ProductImage.display_order)
+        .all()
+    )
+
     return ProductDetail(
         product_id=product.product_id,
         title=product.title,
@@ -224,11 +356,10 @@ async def get_product(
         discount_percent=product.discount_percent,
         currency=product.currency,
         stock_status=product.stock_status,
-        primary_image=primary_image,
-        category=category,
+        primary_image=get_primary_image_url(product_id, db),
+        category=product.category,
         attributes=attributes,
         images=images,
         created_at=product.created_at,
-        updated_at=product.updated_at
+        updated_at=product.updated_at,
     )
-
