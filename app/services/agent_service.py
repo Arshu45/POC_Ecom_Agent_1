@@ -247,18 +247,20 @@ class AgentService:
 RESPONSE FORMAT (JSON):
 {
   "response_text": "Natural language summary highlighting the BEST match first",
-  "recommended_product_ids": ["PRD148", "PRD72", "PRD66"],  // Sorted by relevance
+  "recommended_product_ids": ["PRD148", "PRD72", "PRD66", "PRD45", "PRD89"],  // ALL products, sorted by relevance
   "reasoning": "Why these products match the query",
   "follow_up_questions": ["Question 1?", "Question 2?"]
 }
 
 RULES:
-1. Sort products: in-stock first, then by relevance
-2. Mention stock status in response_text
-3. Highlight the #1 recommendation
-4. Include 2 follow-up questions
-5. Be concise but helpful
-6. Return ONLY valid JSON, no markdown or extra text"""
+1. Include ALL retrieved products in recommended_product_ids (not just top 3)
+2. Sort products: in-stock first, then by relevance
+3. Mention stock status in response_text
+4. Highlight the #1 recommendation in response_text
+5. Include 2 follow-up questions
+6. Be concise but helpful
+7. Return ONLY valid JSON, no markdown or extra text"""
+
             
             # User prompt
             user_prompt = f"""User Query: "{query}"

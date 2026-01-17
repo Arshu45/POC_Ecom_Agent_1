@@ -58,7 +58,17 @@ async function sendChatMessage() {
     if (data.success) {
       addChatMessage(data.response_text, "bot", false, false);
 
-      if (data.products && data.products.length > 0) {
+      // NEW: Display recommended products in main catalog if available
+      if (data.recommended_products && data.recommended_products.length > 0) {
+        displayRecommendedProducts(data.recommended_products);
+        addChatMessage(
+          `✨ Showing ${data.recommended_products.length} recommended products in the catalog below`,
+          "bot",
+          false,
+          true
+        );
+      } else if (data.products && data.products.length > 0) {
+        // Fallback: show minimal products in chat if no recommendations
         addProductsToChat(data.products);
       }
 
@@ -94,6 +104,7 @@ async function sendChatMessage() {
     chatInput.focus();
   }
 }
+
 
 function handleChatKeyPress(event) {
   if (event.key === "Enter" && !event.shiftKey) {
@@ -477,7 +488,71 @@ async function loadProducts(page = 1) {
   }
 }
 
+// ============================================
+// DISPLAY RECOMMENDED PRODUCTS
+// ============================================
+
+function displayRecommendedProducts(products) {
+  const productsGrid = document.getElementById("productsGrid");
+  const productCount = document.getElementById("productCount");
+  const pagination = document.getElementById("pagination");
+
+  if (!productsGrid) return;
+
+  // Clear existing products
+  productsGrid.innerHTML = "";
+
+  // Update header to show "Recommended Products"
+  if (productCount) {
+    productCount.innerHTML = `
+      <span class="badge bg-primary me-2">
+        <i class="bi bi-stars"></i> AI Recommended
+      </span>
+      Showing ${products.length} recommended products
+    `;
+  }
+
+  // Render products using existing createProductCard()
+  products.forEach(product => {
+    const card = createProductCard(product);
+    productsGrid.appendChild(card);
+  });
+
+  // Hide pagination for recommended view
+  if (pagination) {
+    pagination.innerHTML = "";
+  }
+
+  // Remove any existing return button first (prevent duplicates)
+  const existingButton = document.getElementById("returnToAllProductsContainer");
+  if (existingButton) {
+    existingButton.remove();
+  }
+
+  // Add a button to return to regular product listing
+  const returnButton = document.createElement("div");
+  returnButton.id = "returnToAllProductsContainer";
+  returnButton.className = "text-center mt-4 mb-4";
+  returnButton.innerHTML = `
+    <button class="btn btn-outline-secondary btn-lg" id="returnToAllProducts">
+      <i class="bi bi-arrow-left"></i> View All Products
+    </button>
+  `;
+  productsGrid.parentElement.appendChild(returnButton);
+
+  // Add event listener to return button
+  document.getElementById("returnToAllProducts")?.addEventListener("click", () => {
+    // Remove the return button
+    returnButton.remove();
+    // Reload regular products
+    currentFilters = {};
+    loadProducts(1);
+  });
+}
+
+
 function createProductCard(product) {
+
   const col = document.createElement("div");
   col.className = "col-md-4 col-sm-6 mb-4";
 

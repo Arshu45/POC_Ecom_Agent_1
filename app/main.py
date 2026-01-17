@@ -6,6 +6,7 @@ Aligned with dynamic category & attribute architecture.
 import logging
 import json
 import os
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -211,6 +212,7 @@ async def search(request: SearchRequest) -> SearchResponse:
             generate_follow_up_questions(products),
         )
 
+        # Legacy: Format minimal products for chat display
         formatted_products = []
         for p in products:
             try:
@@ -228,11 +230,37 @@ async def search(request: SearchRequest) -> SearchResponse:
             except Exception:
                 continue
 
+        # NEW: Get full product data for recommended products
+        recommended_products = []
+        recommended_product_ids = recommendations.get("recommended_product_ids", [])
+        
+        if recommended_product_ids:
+            try:
+                # Call batch retrieval endpoint
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        "http://localhost:8000/products/batch",
+                        json=recommended_product_ids,
+                        timeout=10.0
+                    )
+                    
+                    if response.status_code == 200:
+                        recommended_products = response.json()
+                        logger.info(f"Retrieved {len(recommended_products)} recommended products")
+                    else:
+                        logger.warning(f"Batch retrieval failed with status {response.status_code}")
+            except Exception as e:
+                logger.error(f"Error fetching recommended products: {e}")
+
         return SearchResponse(
             response_text=response_text,
             products=formatted_products,
+            recommended_products=recommended_products,
             follow_up_questions=follow_up_questions,
-            metadata={"total_results": len(formatted_products)},
+            metadata={
+                "total_results": len(formatted_products),
+                "recommended_count": len(recommended_products)
+            },
             success=True,
         )
 
@@ -241,6 +269,7 @@ async def search(request: SearchRequest) -> SearchResponse:
         return SearchResponse(
             response_text="Something went wrong. Please try again.",
             products=[],
+            recommended_products=[],
             follow_up_questions=[],
             metadata={},
             success=False,

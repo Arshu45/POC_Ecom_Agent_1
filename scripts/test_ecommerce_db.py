@@ -8,9 +8,9 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 
-DATABASE_URL = "postgresql://postgres:mltmorpltru@localhost:5432/test_ecommerce"
+DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/test_ecommerce_db"
 
-CSV_PATH = r"C:\Users\arsha\Desktop\AI_Agent_POC\POC_Ecom_Agent_1\data\catalog_corrected.csv"
+CSV_PATH = r"/Users/arsh/Downloads/POC_Ecom_Agent_1/data/catalog_corrected.csv"
 
 CATEGORY_NAME = "Kids Dresses"
 

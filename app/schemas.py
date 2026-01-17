@@ -25,11 +25,13 @@ class ProductResult(BaseModel):
 
 class SearchResponse(BaseModel):
     response_text: str
-    products: List[ProductResult] = Field(default_factory=list)
+    products: List[ProductResult] = Field(default_factory=list)  # Legacy: minimal product info for chat
+    recommended_products: List["ProductListItem"] = Field(default_factory=list)  # New: full product data for catalog
     follow_up_questions: List[str] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
     success: bool = True
     error_message: Optional[str] = None
+
 
 
 # ============================================================

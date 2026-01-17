@@ -25,6 +25,10 @@ from app.schemas import (
     ProductListResponse,
     ProductAttributeResponse,
 )
+from app.utils.temp_image_fallback import (
+    get_primary_fallback_image,
+    get_fallback_images,
+)
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -34,6 +38,7 @@ router = APIRouter(prefix="/products", tags=["products"])
 # ============================================================
 
 def get_primary_image_url(product_id: str, db: Session) -> Optional[str]:
+    """Get primary image URL for a product, with fallback to temp images."""
     image = (
         db.query(ProductImage)
         .filter(
@@ -42,7 +47,12 @@ def get_primary_image_url(product_id: str, db: Session) -> Optional[str]:
         )
         .first()
     )
-    return image.image_url if image else None
+    
+    # ⚠️ TEMPORARY: Use fallback images if DB is empty
+    if image:
+        return image.image_url
+    else:
+        return get_primary_fallback_image(product_id)
 
 
 def apply_attribute_filters(
@@ -300,6 +310,61 @@ async def list_products(
 
 
 # ============================================================
+# BATCH RETRIEVAL (for agent recommendations)
+# ============================================================
+
+@router.post("/batch", response_model=list[ProductListItem])
+async def get_products_by_ids(
+    product_ids: list[str],
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve multiple products by their IDs.
+    Used by agent to convert recommendations into full product data.
+    
+    Args:
+        product_ids: List of product IDs to retrieve
+        
+    Returns:
+        List of ProductListItem objects with full product data
+    """
+    if not product_ids:
+        return []
+    
+    # Query products by IDs
+    products = (
+        db.query(Product)
+        .filter(Product.product_id.in_(product_ids))
+        .all()
+    )
+    
+    # Create a mapping to preserve order and handle missing products
+    product_map = {p.product_id: p for p in products}
+    
+    # Build response in the same order as requested IDs
+    items = []
+    for product_id in product_ids:
+        product = product_map.get(product_id)
+        if product:
+            items.append(
+                ProductListItem(
+                    product_id=product.product_id,
+                    title=product.title,
+                    brand=product.brand,
+                    product_type=product.product_type,
+                    price=product.price,
+                    mrp=product.mrp,
+                    discount_percent=product.discount_percent,
+                    currency=product.currency,
+                    stock_status=product.stock_status,
+                    primary_image=get_primary_image_url(product.product_id, db),
+                )
+            )
+    
+    return items
+
+
+# ============================================================
 # PRODUCT DETAIL
 # ============================================================
 
@@ -345,6 +410,14 @@ async def get_product(product_id: str, db: Session = Depends(get_db)):
         .order_by(ProductImage.is_primary.desc(), ProductImage.display_order)
         .all()
     )
+    
+    # ⚠️ TEMPORARY: Use fallback images if DB is empty
+    if not images:
+        from app.schemas import ProductImageResponse
+        fallback_images = get_fallback_images(product_id, count=3)
+        images = [
+            ProductImageResponse(**img) for img in fallback_images
+        ]
 
     return ProductDetail(
         product_id=product.product_id,
