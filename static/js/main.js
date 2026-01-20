@@ -59,16 +59,24 @@ async function sendChatMessage() {
       addChatMessage(data.response_text, "bot", false, false);
 
       // NEW: Display recommended products in main catalog if available
+      // if (data.recommended_products && data.recommended_products.length > 0) {
+      //   displayRecommendedProducts(data.recommended_products);
+      //   addChatMessage(
+      //     `✨ Showing ${data.recommended_products.length} recommended products in the catalog below`,
+      //     "bot",
+      //     false,
+      //     true
+      //   );
+      // } else if (data.products && data.products.length > 0) {
+      //   // Fallback: show minimal products in chat if no recommendations
+      //   addProductsToChat(data.products);
+      // }
+
+      // Old
+      // NEW CODE - Always show products in chat only
       if (data.recommended_products && data.recommended_products.length > 0) {
-        displayRecommendedProducts(data.recommended_products);
-        addChatMessage(
-          `✨ Showing ${data.recommended_products.length} recommended products in the catalog below`,
-          "bot",
-          false,
-          true
-        );
+        addRecommendedProductsToChat(data.recommended_products);
       } else if (data.products && data.products.length > 0) {
-        // Fallback: show minimal products in chat if no recommendations
         addProductsToChat(data.products);
       }
 
@@ -168,7 +176,7 @@ function addProductsToChat(products) {
   const productsDiv = document.createElement("div");
   productsDiv.className = "chat-message bot-message";
 
-  let productsHtml = '<div class="message-content"><p><strong>Recommended Products:</strong></p>';
+  let productsHtml = '<div class="message-content"><p><strong>Found Products:</strong></p>';
 
   products.forEach((product) => {
     const featuresHtml =
@@ -183,6 +191,66 @@ function addProductsToChat(products) {
         <div class="chat-product-title">${escapeHtml(product.title)}</div>
         <div class="chat-product-price">${escapeHtml(product.price)}</div>
         ${featuresHtml}
+      </div>
+    `;
+  });
+
+  productsHtml += "</div>";
+  productsDiv.innerHTML = productsHtml;
+  chatMessages.appendChild(productsDiv);
+  scrollChatToBottom();
+}
+
+
+function addRecommendedProductsToChat(products) {
+  const chatMessages = document.getElementById("chatMessages");
+  if (!chatMessages || !products || products.length === 0) return;
+
+  const productsDiv = document.createElement("div");
+  productsDiv.className = "chat-message bot-message";
+
+  let productsHtml = `
+    <div class="message-content">
+      <p><strong>✨ Recommended Products:</strong></p>
+  `;
+
+  products.forEach((product) => {
+    const stockBadgeClass = {
+      "In Stock": "bg-success",
+      "Low Stock": "bg-warning",
+      "Out of Stock": "bg-danger",
+    }[product.stock_status] || "bg-secondary";
+
+    const discountBadge = product.discount_percent
+      ? `<span class="badge bg-danger ms-2">${product.discount_percent}% OFF</span>`
+      : "";
+
+    const mrpDisplay =
+      product.mrp && product.mrp > product.price
+        ? `<span class="text-decoration-line-through text-muted small ms-2">₹${product.mrp.toLocaleString()}</span>`
+        : "";
+
+    productsHtml += `
+      <div class="chat-product-card" onclick="window.open('/product/${product.product_id}', '_blank')">
+        <div class="d-flex align-items-start gap-3">
+          <img src="${product.primary_image || 'https://via.placeholder.com/80x80?text=No+Image'}" 
+               alt="${escapeHtml(product.title)}"
+               style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px;"
+               onerror="this.src='https://via.placeholder.com/80x80?text=No+Image'">
+          <div class="flex-grow-1">
+            <div class="chat-product-title">${escapeHtml(product.title)}</div>
+            <div class="text-muted small mb-1">
+              <i class="bi bi-tag"></i> ${escapeHtml(product.brand || "Unknown Brand")}
+            </div>
+            <div class="mb-2">
+              <span class="badge ${stockBadgeClass}">${product.stock_status || "Unknown"}</span>
+              ${discountBadge}
+            </div>
+            <div class="chat-product-price">
+              ₹${product.price.toLocaleString()} ${mrpDisplay}
+            </div>
+          </div>
+        </div>
       </div>
     `;
   });
@@ -492,63 +560,65 @@ async function loadProducts(page = 1) {
 // DISPLAY RECOMMENDED PRODUCTS
 // ============================================
 
-function displayRecommendedProducts(products) {
-  const productsGrid = document.getElementById("productsGrid");
-  const productCount = document.getElementById("productCount");
-  const pagination = document.getElementById("pagination");
+// # Deprecated 20 Jan
 
-  if (!productsGrid) return;
+// function displayRecommendedProducts(products) {
+//   const productsGrid = document.getElementById("productsGrid");
+//   const productCount = document.getElementById("productCount");
+//   const pagination = document.getElementById("pagination");
 
-  // Clear existing products
-  productsGrid.innerHTML = "";
+//   if (!productsGrid) return;
 
-  // Update header to show "Recommended Products"
-  if (productCount) {
-    productCount.innerHTML = `
-      <span class="badge bg-primary me-2">
-        <i class="bi bi-stars"></i> AI Recommended
-      </span>
-      Showing ${products.length} recommended products
-    `;
-  }
+//   // Clear existing products
+//   productsGrid.innerHTML = "";
 
-  // Render products using existing createProductCard()
-  products.forEach(product => {
-    const card = createProductCard(product);
-    productsGrid.appendChild(card);
-  });
+//   // Update header to show "Recommended Products"
+//   if (productCount) {
+//     productCount.innerHTML = `
+//       <span class="badge bg-primary me-2">
+//         <i class="bi bi-stars"></i> AI Recommended
+//       </span>
+//       Showing ${products.length} recommended products
+//     `;
+//   }
 
-  // Hide pagination for recommended view
-  if (pagination) {
-    pagination.innerHTML = "";
-  }
+//   // Render products using existing createProductCard()
+//   products.forEach(product => {
+//     const card = createProductCard(product);
+//     productsGrid.appendChild(card);
+//   });
 
-  // Remove any existing return button first (prevent duplicates)
-  const existingButton = document.getElementById("returnToAllProductsContainer");
-  if (existingButton) {
-    existingButton.remove();
-  }
+//   // Hide pagination for recommended view
+//   if (pagination) {
+//     pagination.innerHTML = "";
+//   }
 
-  // Add a button to return to regular product listing
-  const returnButton = document.createElement("div");
-  returnButton.id = "returnToAllProductsContainer";
-  returnButton.className = "text-center mt-4 mb-4";
-  returnButton.innerHTML = `
-    <button class="btn btn-outline-secondary btn-lg" id="returnToAllProducts">
-      <i class="bi bi-arrow-left"></i> View All Products
-    </button>
-  `;
-  productsGrid.parentElement.appendChild(returnButton);
+//   // Remove any existing return button first (prevent duplicates)
+//   const existingButton = document.getElementById("returnToAllProductsContainer");
+//   if (existingButton) {
+//     existingButton.remove();
+//   }
 
-  // Add event listener to return button
-  document.getElementById("returnToAllProducts")?.addEventListener("click", () => {
-    // Remove the return button
-    returnButton.remove();
-    // Reload regular products
-    currentFilters = {};
-    loadProducts(1);
-  });
-}
+//   // Add a button to return to regular product listing
+//   const returnButton = document.createElement("div");
+//   returnButton.id = "returnToAllProductsContainer";
+//   returnButton.className = "text-center mt-4 mb-4";
+//   returnButton.innerHTML = `
+//     <button class="btn btn-outline-secondary btn-lg" id="returnToAllProducts">
+//       <i class="bi bi-arrow-left"></i> View All Products
+//     </button>
+//   `;
+//   productsGrid.parentElement.appendChild(returnButton);
+
+//   // Add event listener to return button
+//   document.getElementById("returnToAllProducts")?.addEventListener("click", () => {
+//     // Remove the return button
+//     returnButton.remove();
+//     // Reload regular products
+//     currentFilters = {};
+//     loadProducts(1);
+//   });
+// }
 
 
 function createProductCard(product) {
