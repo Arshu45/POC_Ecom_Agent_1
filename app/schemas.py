@@ -14,6 +14,7 @@ from datetime import datetime
 
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=500)
+    session_id: Optional[str] = None  # Optional for backward compatibility
 
 
 class ProductResult(BaseModel):
@@ -28,6 +29,7 @@ class SearchResponse(BaseModel):
     products: List[ProductResult] = Field(default_factory=list)  # Legacy: minimal product info for chat
     recommended_products: List["ProductListItem"] = Field(default_factory=list)  # New: full product data for catalog
     follow_up_questions: List[str] = Field(default_factory=list)
+    session_id: str  # Always returned for session tracking
     metadata: Dict[str, Any] = Field(default_factory=dict)
     success: bool = True
     error_message: Optional[str] = None
